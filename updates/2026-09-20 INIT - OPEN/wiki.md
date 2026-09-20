@@ -373,8 +373,15 @@ runs the PTY in **raw mode**: Enter is a **carriage return (`\r`)**, so a `\n`
 types the text into the input box but never submits it; and it **interrupts on
 Esc** (Ctrl-C is its exit key). Verified against a real `claude` TUI (it only
 began generating after a `\r`, and shows "esc to interrupt"). `\r` also submits
-in the cooked-mode shell (the tty maps CR→NL), so `TerminalSession.sendLine`
-uses `\r` everywhere, including auto-launch. **How to apply:** any future
-programmatic input to Claude (rebuild/sync/new-update prompts, §8.6) must submit
-with `\r`; interrupts use Esc. Give an Esc ~0.9s to settle before typing so
+in the cooked-mode shell (the tty maps CR→NL).
+
+**And the `\r` must be its own keystroke — Claude's TUI does paste detection.**
+After switching to `\r`, the long wrap-up prompt was *typed but still not sent*.
+Sending `text + "\r"` in one write is treated as a **paste**, so the trailing CR
+is kept as a literal newline in the input box rather than an Enter (short strings
+like `/exit` submitted fine, which masked it). Fix: `sendLine` sends the text,
+then sends `\r` **alone ~0.25s later**, after the paste window closes, so it
+lands as a real Enter. **How to apply:** any future programmatic input to Claude
+(rebuild/sync/new-update prompts, §8.6) must type-then-Enter-separately (use
+`sendLine`); interrupts use Esc; give an Esc ~0.9s to settle before typing so
 keystrokes aren't dropped mid-interrupt.
