@@ -29,6 +29,12 @@ truth and is easy for Claude Code to edit directly.
 **How to apply:** anyone (human or AI) checking out the repo must run
 `xcodegen generate` inside `App/` before opening/building the project.
 
+**Gotcha:** on the installed xcodegen version (2.46.0), a target's `info:`
+block fails to parse (`Decoding failed at "path": Nothing found`) unless it
+explicitly sets `info.path` — `info.properties` alone is not enough, contrary
+to some docs suggesting `path` is optional. `App/project.yml` sets
+`info.path: AIControlApp/Info.plist` for this reason.
+
 ## `.project`'s `claude_md_generated` is `null` for AI Control itself
 
 The global module-merge system (`PROJECT.md` §6.2) that generates

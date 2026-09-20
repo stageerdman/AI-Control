@@ -1,0 +1,33 @@
+name: AIControl
+options:
+  bundleIdPrefix: xyz.erdman
+  deploymentTarget:
+    macOS: "13.0"
+
+packages:
+  AIControlCore:
+    path: ..
+
+targets:
+  AIControl:
+    type: application
+    platform: macOS
+    sources:
+      - path: AIControlApp
+    dependencies:
+      - package: AIControlCore
+        product: AIControlCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: xyz.erdman.aicontrol
+        PRODUCT_NAME: AI Control
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: AIControlApp/Info.plist
+      properties:
+        CFBundleDisplayName: AI Control
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHumanReadableCopyright: ""
+        NSPrincipalClass: NSApplication

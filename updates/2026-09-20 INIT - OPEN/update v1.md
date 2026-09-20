@@ -34,13 +34,21 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**In progress: Phase 0 and Phase 1.**
+**Phase 0 and Phase 1: done.**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
   (public).
 - This project's own tracking files created: `.project`, `.gitignore`,
   `issues.txt`, this update.
+- `AIControlCore` Swift package built: `AIControlNode`, `ProjectFile`,
+  `ProjectFileParser`, `FolderScanner` (with nested-organizer detection).
+- 12 unit tests written and passing (`swift test`), covering project/
+  organizer/untouched classification, frontmatter parsing (including
+  malformed/missing frontmatter), and nested-organizer flagging.
+- macOS app shell scaffolded via `xcodegen` (`App/project.yml`), depends on
+  `AIControlCore`, builds with `xcodebuild`, and launches a real window
+  titled "AI Control".
 
 Decisions made:
 - Repo is public.
@@ -48,8 +56,8 @@ Decisions made:
   Xcode app shell, so it can be unit tested with `swift test` in isolation.
   See `wiki.md` for the full reasoning.
 
-Next:
-- Build `AIControlCore` (models + `FolderScanner` + `.project` parser) with
-  unit tests.
-- Scaffold the macOS app shell with `xcodegen`, wire it to the package,
-  confirm it builds and launches a blank window.
+Next (Phase 2 — Dashboard UI):
+- Launch a UX-focused pass to think through the dashboard: mixed project/
+  organizer list, recency sort, search, running/awaiting-input indicators.
+- Wire the dashboard to real `FolderScanner` output for a configured root
+  folder.
