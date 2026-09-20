@@ -120,9 +120,11 @@ struct DashboardView: View {
                     }
                     .overlay(
                         RowRightClick(
-                            showsCloseSession: sessionStore.runningURLs.contains(row.id),
+                            isRunning: sessionStore.runningURLs.contains(row.id),
+                            isStopping: sessionStore.isStopping(row.id),
                             onSelect: { viewModel.select(row) },
-                            onCloseSession: { closeSession(row) }
+                            onStop: { stopRoutine(row) },
+                            onForceClose: { closeSession(row) }
                         )
                     )
 
@@ -207,8 +209,15 @@ struct DashboardView: View {
         )
     }
 
-    /// Closes a running session (right-click action). Opening is via
-    /// double-click, so there's no "Open Session" menu item.
+    /// Graceful Stop (right-click): asks Claude to wrap up (save, commit, push)
+    /// and then closes the session. The session keeps running visibly while it
+    /// wraps up, so we don't leave the project view here.
+    private func stopRoutine(_ row: DashboardRow) {
+        sessionStore.runStopRoutine(for: row.node.url)
+    }
+
+    /// Force Close (right-click): kills a running session immediately. Opening is
+    /// via double-click, so there's no "Open Session" menu item.
     private func closeSession(_ row: DashboardRow) {
         sessionStore.stopSession(for: row.node.url)
         if openProject?.id == row.id { openProject = nil }

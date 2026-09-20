@@ -28,6 +28,25 @@ final class TerminalSessionStore: ObservableObject {
     private let hooks = SessionHooks()
     private var watcher: StatusDirectoryWatcher?
 
+    /// In-flight graceful Stop routines, keyed by project URL. See
+    /// `runStopRoutine(for:)`.
+    private var stopping: [URL: StopState] = [:]
+
+    /// The prompt sent to Claude Code during the graceful Stop routine
+    /// (PROJECT.md §7/§9.7). Hardcoded for now; the Settings window (§8.6,
+    /// Phase 9) will make it editable — same seam as `autoLaunchCommand`.
+    var stopRoutinePrompt =
+        "Please wrap up now: bring the current task to a safe stopping point, " +
+        "save any state and notes so we can continue later, update the relevant " +
+        "tracking files, then commit and push everything. We'll come back to this."
+
+    /// Tracks one graceful stop: whether we've seen Claude start working on the
+    /// wrap-up prompt yet (so a pre-existing idle state doesn't trigger an early
+    /// exit).
+    private struct StopState {
+        var sawWorking = false
+    }
+
     init() {
         hooks.install()
         watcher = StatusDirectoryWatcher(directory: hooks.statusDirectory) { [weak self] in
@@ -59,8 +78,66 @@ final class TerminalSessionStore: ObservableObject {
 
     func isRunning(_ url: URL) -> Bool { runningURLs.contains(url) }
 
+    func isStopping(_ url: URL) -> Bool { stopping[url] != nil }
+
     func activity(for url: URL) -> SessionActivity {
         activityByURL[url] ?? .working
+    }
+
+    // MARK: - Graceful Stop routine (PROJECT.md §7/§9.7)
+
+    /// Right-click "Stop": interrupt whatever Claude is doing, ask it to wrap up
+    /// (save state, commit, push), wait until it's finished (the `Stop` hook),
+    /// then exit the CLI and close the session. Distinct from "Force Close"
+    /// (`stopSession`), which kills it immediately. A hard timeout guarantees the
+    /// session is closed even if the wrap-up never signals completion.
+    func runStopRoutine(for url: URL) {
+        guard let session = sessions[url], stopping[url] == nil else { return }
+        stopping[url] = StopState()
+
+        session.sendInterrupt()
+        // Give the interrupt a beat to land at Claude's prompt, then send the
+        // wrap-up prompt as a normal message.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.stopping[url] != nil else { return }
+            session.sendLine(self.stopRoutinePrompt)
+        }
+
+        // Safety net: if the wrap-up never reports completion, force-close so a
+        // "Stop" can't hang a session forever.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 300) { [weak self] in
+            guard let self, self.stopping[url] != nil else { return }
+            self.finishStop(url)
+        }
+    }
+
+    /// Advances an in-flight Stop routine based on the latest activity. Called
+    /// from `refreshActivity`. We require having seen `working` (Claude picking
+    /// up the wrap-up prompt) before treating a later `awaitingInput` as "wrap-up
+    /// done" — otherwise a pre-existing idle state would exit immediately.
+    private func advanceStopRoutine(_ url: URL, activity: SessionActivity) {
+        guard var state = stopping[url] else { return }
+        switch activity {
+        case .working:
+            if !state.sawWorking { state.sawWorking = true; stopping[url] = state }
+        case .awaitingInput where state.sawWorking:
+            finishStop(url)
+        case .stopped:
+            finishStop(url)
+        default:
+            break
+        }
+    }
+
+    /// Wrap-up is done (or timed out): exit the CLI cleanly, then close the
+    /// session shortly after so it unpins from the dashboard.
+    private func finishStop(_ url: URL) {
+        guard stopping[url] != nil else { return }
+        stopping[url] = nil
+        sessions[url]?.sendExit()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.stopSession(for: url)
+        }
     }
 
     // MARK: - Status watching
@@ -71,6 +148,7 @@ final class TerminalSessionStore: ObservableObject {
         for (_, url) in keyToURL {
             guard let status = SessionStatusParser.parse(contentsOf: hooks.statusFileURL(for: url)) else { continue }
             activityByURL[url] = status.activity
+            advanceStopRoutine(url, activity: status.activity)
         }
         recomputeAwaitingInput()
     }
@@ -89,6 +167,7 @@ final class TerminalSessionStore: ObservableObject {
     private func cleanup(_ url: URL) {
         sessions[url] = nil
         activityByURL[url] = nil
+        stopping[url] = nil
         keyToURL[hooks.key(for: url)] = nil
         runningURLs.remove(url)
         hooks.removeStatus(for: url)

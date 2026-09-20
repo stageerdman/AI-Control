@@ -3,7 +3,8 @@ import AppKit
 
 /// A transparent overlay that adds macOS right-click behavior to a dashboard
 /// row: it **selects** the row first (so you see what you're acting on) and,
-/// when `showsCloseSession` is true, pops a "Close Session" menu.
+/// for a running session, pops a menu with **Stop** (graceful wrap-up routine,
+/// PROJECT.md §7/§9.7) and **Force Close** (immediate kill).
 ///
 /// SwiftUI's own `.contextMenu` can't select-on-open, hence this small AppKit
 /// shim. `hitTest` claims **only** right-mouse events (inspecting the current
@@ -11,9 +12,13 @@ import AppKit
 /// and falls through to the SwiftUI row beneath, so existing gestures are
 /// untouched.
 struct RowRightClick: NSViewRepresentable {
-    var showsCloseSession: Bool
+    /// Whether this row currently has a running session (menu is only shown then).
+    var isRunning: Bool
+    /// Whether a graceful Stop routine is already in flight (disables "Stop").
+    var isStopping: Bool
     var onSelect: () -> Void
-    var onCloseSession: () -> Void
+    var onStop: () -> Void
+    var onForceClose: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = CatcherView()
@@ -27,15 +32,19 @@ struct RowRightClick: NSViewRepresentable {
     }
 
     private func configure(_ view: CatcherView) {
-        view.showsCloseSession = showsCloseSession
+        view.isRunning = isRunning
+        view.isStopping = isStopping
         view.onSelect = onSelect
-        view.onCloseSession = onCloseSession
+        view.onStop = onStop
+        view.onForceClose = onForceClose
     }
 
     final class CatcherView: NSView {
-        var showsCloseSession = false
+        var isRunning = false
+        var isStopping = false
         var onSelect: (() -> Void)?
-        var onCloseSession: (() -> Void)?
+        var onStop: (() -> Void)?
+        var onForceClose: (() -> Void)?
 
         override func hitTest(_ point: NSPoint) -> NSView? {
             switch NSApp.currentEvent?.type {
@@ -48,14 +57,24 @@ struct RowRightClick: NSViewRepresentable {
 
         override func rightMouseDown(with event: NSEvent) {
             onSelect?()
-            guard showsCloseSession else { return }
+            guard isRunning else { return }
             let menu = NSMenu()
-            let item = NSMenuItem(title: "Close Session", action: #selector(closeSession), keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
+
+            let stop = NSMenuItem(title: "Stop", action: #selector(stopSession), keyEquivalent: "")
+            stop.target = self
+            stop.isEnabled = !isStopping
+            stop.toolTip = "Ask Claude to wrap up (save, commit, push), then exit"
+            menu.addItem(stop)
+
+            let force = NSMenuItem(title: "Force Close", action: #selector(forceClose), keyEquivalent: "")
+            force.target = self
+            force.toolTip = "Kill the session immediately without wrapping up"
+            menu.addItem(force)
+
             NSMenu.popUpContextMenu(menu, with: event, for: self)
         }
 
-        @objc private func closeSession() { onCloseSession?() }
+        @objc private func stopSession() { onStop?() }
+        @objc private func forceClose() { onForceClose?() }
     }
 }
