@@ -44,6 +44,17 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate,
     private let recentLimit = 8192
     private var didAutoLaunch = false
 
+    /// Fired once, on the main thread, when the session first looks ready for
+    /// programmatic input: the auto-launched command was sent and output has gone
+    /// quiet (Claude's TUI finished booting), or a hard cap elapsed. Lets callers
+    /// time a first prompt into a freshly-opened session (e.g. the module-authoring
+    /// interview) without racing Claude's startup — a fixed delay can't, since a
+    /// cold session hasn't even launched Claude yet.
+    var onReady: (() -> Void)?
+    private var autoLaunchSent = false
+    private var didFireReady = false
+    private var readyTimer: DispatchWorkItem?
+
     init(projectURL: URL, autoLaunchCommand: String? = "claude") {
         self.projectURL = projectURL
         self.autoLaunchCommand = autoLaunchCommand
@@ -121,9 +132,35 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate,
         if !didAutoLaunch, let command = autoLaunchCommand {
             didAutoLaunch = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.send(command + "\r") // CR submits in both the shell and Claude's TUI
+                guard let self else { return }
+                self.send(command + "\r") // CR submits in both the shell and Claude's TUI
+                self.autoLaunchSent = true
+                // Hard cap: fire ready even if output never fully quiesces.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in self?.fireReady() }
             }
         }
+        // After launch, treat 1.6s of output silence as "booted and idle at the
+        // prompt" and fire ready then. Each new byte pushes the deadline out.
+        if autoLaunchSent && !didFireReady { bumpReadyQuiescence() }
+    }
+
+    /// (Re)arms the quiescence timer; when it fires without being pushed again,
+    /// output has been quiet long enough to call the session ready.
+    private func bumpReadyQuiescence() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.autoLaunchSent, !self.didFireReady else { return }
+            self.readyTimer?.cancel()
+            let work = DispatchWorkItem { [weak self] in self?.fireReady() }
+            self.readyTimer = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6, execute: work)
+        }
+    }
+
+    private func fireReady() {
+        guard !didFireReady else { return }
+        didFireReady = true
+        readyTimer?.cancel()
+        onReady?()
     }
 
     private func appendRecent(_ slice: ArraySlice<UInt8>) {

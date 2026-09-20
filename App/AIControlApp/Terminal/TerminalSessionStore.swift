@@ -194,7 +194,10 @@ final class TerminalSessionStore: ObservableObject {
         let session = session(for: dir)
         if isNew {
             let prompt = globalConfig?.promptText(for: .authorModules) ?? RoutinePromptKind.authorModules.defaultText
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { session.sendLine(prompt) }
+            // Send only once Claude has actually booted and is idle at its prompt
+            // — a fixed delay races startup on a cold session (the send lands in
+            // the void). `onReady` fires after the launched TUI goes quiet.
+            session.onReady = { [weak session] in session?.sendLine(prompt) }
         }
         return session
     }

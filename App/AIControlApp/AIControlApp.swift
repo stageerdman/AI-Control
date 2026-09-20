@@ -35,15 +35,12 @@ struct AIControlApp: App {
             )
         }
         .commands {
-            // Claim the standard app-menu Settings… ⌘, slot to open our Global
-            // Config window (a real resizable Window, not the fixed Settings
-            // scene), and add a Window-menu item so it's reopenable once closed.
-            CommandGroup(replacing: .appSettings) {
-                Button("Settings…") { openWindow(id: GlobalConfigWindow.windowID) }
+            // A single, clearly-labelled top-level menu-bar menu — the one entry
+            // point to the Global Config window, easy to spot at the top of the
+            // screen. ⌘, opens it too.
+            CommandMenu("Global Config") {
+                Button("Open Global Config") { openWindow(id: GlobalConfigWindow.windowID) }
                     .keyboardShortcut(",", modifiers: .command)
-            }
-            CommandGroup(after: .windowList) {
-                Button("Global Config") { openWindow(id: GlobalConfigWindow.windowID) }
             }
         }
 

@@ -224,7 +224,7 @@ struct GlobalConfigWindow: View {
                             Text(globalConfig.isPromptEdited(kind) ? "Edited" : "Default")
                                 .font(.caption2).foregroundStyle(.tertiary)
                             Spacer(minLength: 8)
-                            Button("Open in editor") { NSWorkspace.shared.open(globalConfig.promptFileURL(for: kind)) }
+                            Button("Open in editor") { ConfigFolderActions.open(globalConfig.promptFileURL(for: kind)) }
                                 .controlSize(.small)
                         }
                     }
@@ -295,12 +295,20 @@ struct ConfigFolderActions: View {
                     .controlSize(.small)
             }
             if let file = fileURL {
-                Button(openLabel) { NSWorkspace.shared.open(file) }
+                Button(openLabel) { Self.open(file) }
                     .controlSize(.small)
             } else if let folder = folderURL {
-                Button("Open Folder") { NSWorkspace.shared.open(folder) }
+                Button("Open Folder") { Self.open(folder) }
                     .controlSize(.small)
             }
+        }
+    }
+
+    /// Open in the default app; if the OS has no association (common for `.md`),
+    /// fall back to revealing in Finder rather than failing silently.
+    static func open(_ url: URL) {
+        if !NSWorkspace.shared.open(url) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
         }
     }
 }

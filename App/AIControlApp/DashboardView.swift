@@ -140,14 +140,6 @@ struct DashboardView: View {
             ToolbarItem(placement: .automatic) {
                 Button("Choose Folder…") { isChoosingFolder = true }
             }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    openWindow(id: GlobalConfigWindow.windowID)
-                } label: {
-                    Label("Global Config", systemImage: "gearshape")
-                }
-                .help("Global Config")
-            }
         }
     }
 
