@@ -71,10 +71,16 @@ struct SidebarSection<Content: View>: View {
     }
 }
 
-/// A flat key/value line: tertiary key, secondary value.
+/// A flat key/value line: tertiary key, secondary value. Set `placeholder`
+/// for data a later phase will provide — the value dims and gets an em-dash
+/// prefix (e.g. "— not available yet"), while the row keeps the exact same
+/// shape and label color as a real one, so a section of mixed real/pending
+/// rows reads as one uniform list. The absence of a status *color* is the
+/// honest signal — never a faked green/red.
 struct SidebarKeyValue: View {
     let key: String
     let value: String
+    var placeholder: Bool = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -82,31 +88,11 @@ struct SidebarKeyValue: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .frame(width: 96, alignment: .leading)
-            Text(value)
+            Text(placeholder ? "— \(value)" : value)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(placeholder ? .tertiary : .secondary)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
-        }
-    }
-}
-
-/// An honestly-empty row for data a later phase will provide: a label with a
-/// neutral, *uncolored* "not available yet" note. The absence of a status
-/// color is itself the signal — never a faked green/red.
-struct SidebarPlaceholderRow: View {
-    let label: String
-    var note: String = "not available yet"
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Text("— \(note)")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
     }
 }

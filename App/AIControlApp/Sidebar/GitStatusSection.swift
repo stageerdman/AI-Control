@@ -1,9 +1,9 @@
 import SwiftUI
 import AIControlCore
 
-/// The sidebar's Git section: the richest *actually-true* data this phase has.
-/// `status == nil` means a read is still in flight. This is read-only — the
-/// only interactive element is the GitHub link, which opens the browser.
+/// The sidebar's GitHub section: the richest *actually-true* data this phase
+/// has. `status == nil` means a read is still in flight. This is read-only —
+/// the only interactive element is the GitHub link, which opens the browser.
 struct GitStatusSection: View {
     let status: GitStatus?
     /// `github:` URL from `.project`, if any.
@@ -12,7 +12,7 @@ struct GitStatusSection: View {
     let visibility: String?
 
     var body: some View {
-        SidebarSection(title: "Git") {
+        SidebarSection(title: "GitHub") {
             VStack(alignment: .leading, spacing: 4) {
                 switch status {
                 case .none:
@@ -21,11 +21,11 @@ struct GitStatusSection: View {
                         Text("Reading…").font(.caption).foregroundStyle(.tertiary)
                     }
                 case .some(let status) where !status.isRepository:
-                    Text("Not a git repository")
+                    // Not a git repo → nothing is connected, so there's no
+                    // branch, URL, or public/private to report. One phrase.
+                    Text("Not connected")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                    githubRow // a folder may declare a github URL even if not cloned as a repo
-                    visibilityRow
                 case .some(let status):
                     cleanStateRow(status)
                     branchRow(status)

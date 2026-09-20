@@ -115,11 +115,12 @@ private struct ProjectDetail: View {
         SidebarSection(title: "Maintenance") {
             VStack(alignment: .leading, spacing: 4) {
                 // `claude_md_generated == null` is truthful today, so say so.
-                SidebarPlaceholderRow(
-                    label: "CLAUDE.md drift",
-                    note: file.claudeMdGenerated == nil ? "not generated yet" : "not available yet"
+                SidebarKeyValue(
+                    key: "CLAUDE.md drift",
+                    value: file.claudeMdGenerated == nil ? "not generated yet" : "not available yet",
+                    placeholder: true
                 )
-                SidebarPlaceholderRow(label: "Secret sync")
+                SidebarKeyValue(key: "Secret sync", value: "not available yet", placeholder: true)
                 Text("Available once global config exists.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -132,7 +133,7 @@ private struct ProjectDetail: View {
         SidebarSection(title: "Activity") {
             VStack(alignment: .leading, spacing: 4) {
                 SidebarKeyValue(key: "Folder modified", value: SidebarFormat.relativeString(node.lastActivityDate))
-                SidebarPlaceholderRow(label: "Tokens consumed")
+                SidebarKeyValue(key: "Tokens consumed", value: "not available yet", placeholder: true)
             }
         }
     }
