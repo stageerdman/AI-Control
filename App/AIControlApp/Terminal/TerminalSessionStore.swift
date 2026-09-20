@@ -96,9 +96,11 @@ final class TerminalSessionStore: ObservableObject {
         stopping[url] = StopState()
 
         session.sendInterrupt()
-        // Give the interrupt a beat to land at Claude's prompt, then send the
-        // wrap-up prompt as a normal message.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Give the interrupt a beat to actually halt generation and return Claude
+        // to a ready input line before typing, so no keystrokes are dropped
+        // mid-interrupt. Works the same whether Claude was mid-task or waiting on
+        // a question (Esc cancels either).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
             guard let self, self.stopping[url] != nil else { return }
             session.sendLine(self.stopRoutinePrompt)
         }

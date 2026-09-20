@@ -74,15 +74,20 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
         terminalView.send(txt: text)
     }
 
-    /// Sends Ctrl-C to interrupt whatever Claude Code (or the shell) is doing —
-    /// the first step of the Stop routine (PROJECT.md §7/§9.7).
+    /// Interrupts whatever Claude Code is doing — the first step of the Stop
+    /// routine (PROJECT.md §7/§9.7). Claude Code interrupts on **Esc** (Ctrl-C is
+    /// its *exit* key), and pressing Esc at an idle/question prompt harmlessly
+    /// clears the input line, so this is safe whether or not a task is running.
     func sendInterrupt() {
-        terminalView.send(txt: "\u{03}") // ETX / Ctrl-C
+        terminalView.send(txt: "\u{1b}") // ESC
     }
 
-    /// Sends a full line of text (prompt + newline), e.g. the stop-routine prompt.
+    /// Sends a line of text and submits it. Uses a **carriage return** (`\r`),
+    /// not `\n`: Claude Code's TUI runs the PTY in raw mode and treats Enter as
+    /// CR, so a `\n` types the text but never submits it. `\r` also works for a
+    /// cooked-mode shell (the tty maps CR→NL), so it's correct everywhere.
     func sendLine(_ text: String) {
-        send(text + "\n")
+        send(text + "\r")
     }
 
     /// Asks the CLI to exit cleanly (`/exit`), used at the end of the Stop
@@ -107,7 +112,7 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
         if !didAutoLaunch, let command = autoLaunchCommand {
             didAutoLaunch = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                self?.send(command + "\n")
+                self?.send(command + "\r") // CR submits in both the shell and Claude's TUI
             }
         }
     }
