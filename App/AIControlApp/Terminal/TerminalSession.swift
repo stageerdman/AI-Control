@@ -28,8 +28,9 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
 
     /// Command auto-run once the shell is ready, so opening a project drops you
     /// straight into Claude Code (PROJECT.md §7/§8.3). `nil` leaves a plain
-    /// shell. The auto-permission flag (§11) is left for a later settings pass.
-    var autoLaunchCommand: String? = "claude"
+    /// shell. Set by the store to `claude --settings <app file>`, which turns on
+    /// bypassPermissions (auto mode, §4) and registers the state hooks (§11).
+    var autoLaunchCommand: String?
 
     /// Called when the session ends (process exits or `stop()`), on the main
     /// thread — the store uses it to drop the session and clear its pin.
@@ -42,8 +43,9 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
     private let recentLimit = 8192
     private var didAutoLaunch = false
 
-    init(projectURL: URL) {
+    init(projectURL: URL, autoLaunchCommand: String? = "claude") {
         self.projectURL = projectURL
+        self.autoLaunchCommand = autoLaunchCommand
         terminalView = TeeingTerminalView(frame: CGRect(x: 0, y: 0, width: 800, height: 480))
         terminalView.processDelegate = self
         terminalView.onData = { [weak self] slice in self?.handleData(slice) }
@@ -70,6 +72,23 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
     /// Sends text to the child process as if typed (prompts, interrupts, exit).
     func send(_ text: String) {
         terminalView.send(txt: text)
+    }
+
+    /// Sends Ctrl-C to interrupt whatever Claude Code (or the shell) is doing —
+    /// the first step of the Stop routine (PROJECT.md §7/§9.7).
+    func sendInterrupt() {
+        terminalView.send(txt: "\u{03}") // ETX / Ctrl-C
+    }
+
+    /// Sends a full line of text (prompt + newline), e.g. the stop-routine prompt.
+    func sendLine(_ text: String) {
+        send(text + "\n")
+    }
+
+    /// Asks the CLI to exit cleanly (`/exit`), used at the end of the Stop
+    /// routine once Claude has finished wrapping up.
+    func sendExit() {
+        sendLine("/exit")
     }
 
     /// Terminates the child process (the right-click "Close Session" action).
