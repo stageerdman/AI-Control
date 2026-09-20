@@ -34,7 +34,7 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**Phase 0, Phase 1, Phase 2, and Phase 3: done.**
+**Phase 0, Phase 1, Phase 2, Phase 3, and Phase 4: done.**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
@@ -89,11 +89,28 @@ Phase 3 (Project sidebar) — done:
   (need session-log parsing, Phase 10 data), and the untouched-folder
   "Bring under AI Control" flow (Phase 9.3 — reveals in Finder for now).
 
-Next (Phase 4 — Terminal embedding):
-- SwiftTerm-based PTY session per project; app can send input and read
-  output. This is the first research-flavored phase (new API) — per
-  CLAUDE.md principle 3, start with an isolated experiment inside this
-  update's folder before touching the main app.
-- Note: `issues.txt` display (PROJECT.md §5.4) belongs to the double-click
-  **project view** (§8.3), not the single-click sidebar — it was folded
-  into the original Phase 3 line but is really a project-view concern.
+Phase 4 (Terminal embedding) — done:
+- Research-first per CLAUDE.md principle 3: an isolated `phase4-experiment/`
+  SPM package pulled SwiftTerm so its real API could be read from source;
+  findings + build gotchas in `phase4-research.md`.
+- SwiftTerm 1.20.0 added to `App/project.yml`; terminal code lives in the
+  **App target** (AppKit), keeping `AIControlCore` UI-free.
+- `TerminalSession` (+ `TeeingTerminalView`) owns one
+  `LocalProcessTerminalView`, launches `$SHELL -l` in the project folder,
+  and exposes **send input** (`send(_:)`) and **read output** (a
+  `dataReceived` tee into a bounded `recentOutput`) — the two §11 abilities.
+- `TerminalSessionStore` keeps one session per project URL so it **survives
+  navigation** (§11). `ProjectView` shows the terminal full-area on
+  double-click with a Back control; single-click still drives the sidebar.
+- Build needs two flags/steps: `-skipPackagePluginValidation` and a
+  user-installed Metal toolchain (agent's shell can't download it).
+
+Next (Phase 5 — Session management):
+- Pin running sessions on top, awaiting-input detection (via the
+  `dataReceived` tee or Claude Code hooks), Stop routine, notifications,
+  Dock badge. The `recentOutput` tee and `TerminalSession.isRunning`/
+  `exitCode` are the hooks already in place for this.
+- Deferred from Phase 4: auto-launching `claude` (vs a plain shell), and the
+  project-view side panel (recent updates, how-to-use/status, `issues.txt`
+  per §8.3, New-Update button). `issues.txt` display belongs to this
+  project view, not the single-click sidebar.

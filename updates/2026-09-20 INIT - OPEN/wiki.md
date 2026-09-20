@@ -255,3 +255,33 @@ respective predefined prompts to it.
 `(folderURL, promptKind)` sent to the dashboard AI session, and route the
 right-click menu's AI action through the same path — don't invent per-action
 plumbing.
+
+## SwiftTerm embedding: what the app needs, and two build snags
+
+Phase 4 embedded a real PTY per project with SwiftTerm 1.20.0. Full API notes
+live in `phase4-research.md`; the durable lessons:
+
+- **Terminal code stays in the App target, not `AIControlCore`.** SwiftTerm is
+  AppKit; `AIControlCore` must stay UI-free and `swift test`-able. This is the
+  same modular line drawn in Phase 1.
+- **`LocalProcessTerminalView` is the whole surface.** `startProcess(...,
+  currentDirectory:)` launches in the project folder; `send(txt:)` is
+  programmatic input; overriding `open func dataReceived(slice:)` tees output
+  for later idle/awaiting-input detection. Don't touch `terminalDelegate` (the
+  class owns it) — use `processDelegate` + the `dataReceived` override.
+- **Launch a login shell (`$SHELL -l`), not `/bin/bash`.** SwiftTerm's default
+  environment deliberately omits `PATH`, so a bare shell can't find
+  `git`/`gh`/`claude`; a login shell sources the profile and fixes it.
+- **Sessions must outlive navigation** (PROJECT.md §11) → a store keyed by
+  project URL holds them; the SwiftUI view only references, never owns them.
+
+Two first-build snags with `xcodebuild` (both recorded so nobody re-derives
+them):
+1. SwiftTerm's `SwiftTermBuildInfoPlugin` fails unattended validation → pass
+   **`-skipPackagePluginValidation`**.
+2. SwiftTerm's `Shaders.metal` needs the **Metal toolchain**, a separate
+   downloadable component. `xcodebuild -downloadComponent MetalToolchain`
+   **only works from the user's own terminal** — from the agent's
+   non-interactive shell it hangs at 0 bytes forever. **How to apply:** treat
+   any `downloadComponent` / SDK-component install as a user step; ask the user
+   to run it rather than burning time waiting on a stalled agent-side download.
