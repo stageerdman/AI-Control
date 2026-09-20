@@ -136,6 +136,20 @@ Phase 5 (Session management) — done:
 - Requires a **live build test** by the user (see below); logic-level pieces
   are unit-tested (47 total) and the app builds.
 
+Phase 5.1 (attention affordances, from live feedback) — done:
+- Fixed from the first live test: auto mode now uses
+  `--dangerously-skip-permissions` (the settings-file `bypassPermissions` pops
+  an acceptance + trust gate in the interactive TUI); re-added the
+  `Notification` hook so mid-task questions count as awaiting.
+- **Red attention banner** (§8 spirit): a thin full-bleed banner above both
+  screens when a non-foreground session awaits — "Go there" / "Show" / X.
+  Consolidated (one banner for N projects); X dismisses per episode.
+- **Red row glow**: a blurred red rim on awaiting rows (one entry swell then
+  steady; Reduce-Motion aware) as an ambient reminder that outlives banner
+  dismissal. One `Color.attentionRed` used nowhere else. A UX-specialist pass
+  designed both first.
+- Needs a live look (banner copy/placement, glow intensity).
+
 Still deferred (not Phase 5 scope):
 - The one-shot working→awaiting entry *pulse* animation — left to tune during
   live testing (the static arrow + reorder already ship).
