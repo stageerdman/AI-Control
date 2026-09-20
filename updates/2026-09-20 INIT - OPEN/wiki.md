@@ -292,14 +292,27 @@ The §11 open question ("detect awaiting-input via terminal output or hooks")
 was decided in Phase 5 in favour of **hooks**, after an isolated experiment
 (`phase5-experiment/`, `phase5-research.md`) proved it works end-to-end.
 
-- **One app-owned `--settings` file per project does everything.** It's passed
-  as `claude --settings <file>` and carries both `permissions.defaultMode:
-  bypassPermissions` (auto mode, §4 — no CLI flag needed) **and** the hooks.
-  We never touch the user's `~/.claude/settings.json`. The doc's warning that
-  `bypassPermissions` is refused from a project `.claude/settings.json` does
-  **not** apply to a file given via `--settings` — that path honours it.
-- **`Stop` = awaiting-input; `UserPromptSubmit`/`SessionStart` = working;
-  `SessionEnd` = stopped.** The mapping lives in the tested `SessionActivity`
+- **App-owned `--settings` file for the hooks; the launch *flag* for auto
+  mode.** We pass `claude --settings <file> --dangerously-skip-permissions`.
+  We never touch the user's `~/.claude/settings.json`.
+- **Auto mode: use the flag, not `bypassPermissions` in settings — they behave
+  differently interactively.** `permissions.defaultMode: bypassPermissions`
+  from `--settings` works in headless `-p` mode, but in the **interactive TUI**
+  it pops a one-time *"WARNING: Bypass Permissions mode → Yes, I accept"* screen
+  **and** a *"trust this folder?"* prompt — which is exactly what "manual mode,
+  approve everything" looked like in the first live test. **`--dangerously-skip-
+  permissions` starts clean** (no acceptance, no trust gate). So the settings
+  file carries only hooks; the flag carries permissions. Lesson: **validate CLI
+  behaviour interactively, not just with `-p`** — the two modes gate
+  differently.
+- **Register `Notification` too, with a `"*"` matcher (like `Stop`).** Claude's
+  mid-task questions / idle prompts fire `Notification`, not `Stop`; without it
+  those "your turn" moments go unnoticed. `Stop`/`Notification` need the `"*"`
+  matcher; the lifecycle events (`SessionStart`/`UserPromptSubmit`/`SessionEnd`)
+  fire without one.
+- **`Stop`/`Notification` = awaiting-input; `UserPromptSubmit`/`SessionStart` =
+  working; `SessionEnd` = stopped.** The mapping lives in the tested
+  `SessionActivity`
   (AIControlCore), not the shell hook — same "pure parser owns interpretation"
   line as `GitStatusParser`. `SessionStatusParser` decodes the status-file JSON;
   `TerminalSessionStore` is the thin watcher.
