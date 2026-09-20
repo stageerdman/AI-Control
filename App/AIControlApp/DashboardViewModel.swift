@@ -112,6 +112,13 @@ final class DashboardViewModel: ObservableObject {
         selectedID = nil
     }
 
+    /// Selects a row without any side effects (no organizer expand toggle).
+    /// Used by right-click so the row highlights to show what's being acted on.
+    func select(_ row: DashboardRow) {
+        cursorID = row.id
+        selectedID = row.id
+    }
+
     /// Recomputes `selectedNode` from `selectedID`. Cheap (an in-memory lookup)
     /// — no git or other I/O, so clicking between rows is instant. GitHub info
     /// in the sidebar comes from `.project`, not a per-click `git` call.

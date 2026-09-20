@@ -94,11 +94,13 @@ struct DashboardView: View {
                     .onTapGesture {
                         handleRowTap(row)
                     }
-                    .ifCondition(sessionStore.runningURLs.contains(row.id)) { view in
-                        view.contextMenu {
-                            Button("Close Session", role: .destructive) { closeSession(row) }
-                        }
-                    }
+                    .overlay(
+                        RowRightClick(
+                            showsCloseSession: sessionStore.runningURLs.contains(row.id),
+                            onSelect: { viewModel.select(row) },
+                            onCloseSession: { closeSession(row) }
+                        )
+                    )
 
                     // Separate the pinned running sessions from the rest.
                     if viewModel.pinnedRunningCount > 0, index == viewModel.pinnedRunningCount - 1 {
@@ -167,19 +169,6 @@ struct DashboardView: View {
     private func closeSession(_ row: DashboardRow) {
         sessionStore.stopSession(for: row.node.url)
         if openProject?.id == row.id { openProject = nil }
-    }
-}
-
-private extension View {
-    /// Applies `transform` only when `condition` is true, so a modifier (e.g. a
-    /// context menu) isn't attached at all otherwise — avoids an empty
-    /// right-click menu on rows that have nothing to offer.
-    @ViewBuilder
-    func ifCondition<Transformed: View>(
-        _ condition: Bool,
-        _ transform: (Self) -> Transformed
-    ) -> some View {
-        if condition { transform(self) } else { self }
     }
 }
 
