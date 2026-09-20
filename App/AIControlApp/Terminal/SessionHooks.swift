@@ -20,10 +20,14 @@ struct SessionHooks {
     let statusDirectory: URL
     let settingsDirectory: URL
 
-    /// The hook events we register. `Stop` is the awaiting-input signal;
-    /// `UserPromptSubmit`/`SessionStart` mean working; `SessionEnd` means the
-    /// CLI exited. `SessionStatusParser` maps these to `SessionActivity`.
-    static let events = ["SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
+    /// The hook events we register. `Stop`/`Notification` are the awaiting-input
+    /// signals (Claude finished, or it's asking a question / idle-prompting);
+    /// `UserPromptSubmit`/`SessionStart` mean working; `SessionEnd` means the CLI
+    /// exited. `SessionStatusParser` maps these to `SessionActivity`. `Stop` and
+    /// `Notification` are the ones proven to need a `"*"` matcher (see
+    /// `phase5-research.md`).
+    static let events = ["SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd"]
+    private static let matchedEvents: Set<String> = ["Stop", "Notification"]
 
     init(fileManager: FileManager = .default) {
         let base = (try? fileManager.url(
@@ -81,11 +85,17 @@ struct SessionHooks {
     }
 
     /// The command to auto-run in the project's shell: launch Claude Code with
-    /// the app-owned settings file. Paths are double-quoted because Application
-    /// Support contains a space (see `phase5-research.md`).
+    /// the app-owned settings file (for the state hooks) and
+    /// `--dangerously-skip-permissions` for auto mode (§4, §11). The flag — not
+    /// the settings file — is what actually skips the gates **interactively**:
+    /// `permissions.defaultMode: bypassPermissions` from `--settings` still pops
+    /// a one-time "Yes, I accept" bypass screen and a folder-trust prompt in the
+    /// TUI, whereas the flag starts clean (verified during Phase 5 debugging —
+    /// see `phase5-research.md`). Paths are double-quoted because Application
+    /// Support contains a space.
     func autoLaunchCommand(for projectURL: URL) -> String {
         let settingsURL = writeSettings(for: projectURL)
-        return "claude --settings \"\(settingsURL.path)\""
+        return "claude --settings \"\(settingsURL.path)\" --dangerously-skip-permissions"
     }
 
     // MARK: - Generated file contents
@@ -117,16 +127,20 @@ struct SessionHooks {
         // Support doesn't get word-split by /bin/sh.
         let hookEntries = Self.events.map { event in
             let command = "\"\(scriptURL.path)\" \(event) \"\(out)\" \"\(cwd)\""
+            let matcher = Self.matchedEvents.contains(event) ? #""matcher": "*", "# : ""
             return """
                 "\(event)": [
-                  { "hooks": [ { "type": "command", "command": "\(escaped(command))" } ] }
+                  { \(matcher)"hooks": [ { "type": "command", "command": "\(escaped(command))" } ] }
                 ]
             """
         }.joined(separator: ",\n")
 
+        // No "permissions" block here — auto mode comes from the
+        // --dangerously-skip-permissions launch flag, which (unlike a
+        // bypassPermissions defaultMode in settings) doesn't pop an acceptance
+        // screen in the interactive TUI.
         return """
         {
-          "permissions": { "defaultMode": "bypassPermissions" },
           "hooks": {
         \(hookEntries)
           }
