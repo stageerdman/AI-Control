@@ -5,6 +5,13 @@ public enum NodeKind: String, Equatable {
     case project
     case organizer
     case untouched
+
+    /// An `.organize` folder found *inside* another organizer. Nested
+    /// organizers aren't allowed (`PROJECT.md` §3.2), so this is never
+    /// treated as a working organizer — no children are scanned, no
+    /// expand/collapse, no interaction. It's surfaced purely as a mistake to
+    /// fix, not a container to browse.
+    case invalidNestedOrganizer
 }
 
 /// One folder found while scanning the root, classified per `PROJECT.md` §3.
@@ -22,6 +29,12 @@ public struct AIControlNode: Identifiable, Equatable {
     /// can be told to fix it.
     public let nestedOrganizerWarning: Bool
 
+    /// Recency signal used to order the dashboard. A placeholder until
+    /// Claude Code session-log timestamps are wired in (see `wiki.md`):
+    /// folder modification time for projects/untouched, and the max of
+    /// children's dates for organizers.
+    public let lastActivityDate: Date
+
     public var id: URL { url }
     public var name: String { url.lastPathComponent }
 
@@ -30,12 +43,14 @@ public struct AIControlNode: Identifiable, Equatable {
         kind: NodeKind,
         projectFile: ProjectFile? = nil,
         children: [AIControlNode] = [],
-        nestedOrganizerWarning: Bool = false
+        nestedOrganizerWarning: Bool = false,
+        lastActivityDate: Date = .distantPast
     ) {
         self.url = url
         self.kind = kind
         self.projectFile = projectFile
         self.children = children
         self.nestedOrganizerWarning = nestedOrganizerWarning
+        self.lastActivityDate = lastActivityDate
     }
 }

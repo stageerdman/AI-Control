@@ -35,6 +35,108 @@ explicitly sets `info.path` — `info.properties` alone is not enough, contrary
 to some docs suggesting `path` is optional. `App/project.yml` sets
 `info.path: AIControlApp/Info.plist` for this reason.
 
+## Recency uses folder modification time as a placeholder
+
+`AIControlNode.lastActivityDate` (used to sort the dashboard) is folder
+`contentModificationDate` for now — not real Claude Code chat history.
+
+**Why:** session-log integration is unbuilt (Phase 4+); the dashboard still
+needs *some* ordering signal to be useful and testable now.
+
+**How to apply:** when Claude Code session-log timestamps get wired in,
+swap the source `FolderScanner` reads `lastActivityDate` from — the field,
+the `DashboardListBuilder` sort, and all tests keyed on it should keep
+working unchanged, since they only depend on "a `Date` that means recency,"
+not on where it comes from.
+
+## Deployment target bumped macOS 13 → 14 for `.onKeyPress`
+
+The dashboard's interaction model (Phase 2) needs custom keyboard handling —
+flat arrow-key traversal across mixed project/organizer rows, Left/Right for
+expand/collapse, asymmetric Enter behavior — that SwiftUI's `List` selection
+binding doesn't provide on its own. `.onKeyPress` (macOS 14+) is the natural
+fit.
+
+**Why:** this is a single-user tool that only ever runs on the developer's
+own machine (currently macOS 26.6.1), so there's no real compatibility cost
+to requiring a recent OS, and it avoids hand-rolling `NSEvent` key monitoring
+just to support an OS version nobody's actually running.
+
+**How to apply:** don't hesitate to require current macOS versions for
+future phases either — this isn't a distributed app with an install base to
+support.
+
+## Real usage overrode the UX docs' asymmetric selection model
+
+The three UX-specialist passes (`ux-notes-interaction-model.md`) designed a
+deliberate asymmetry: projects/untouched get a persistent "selected"
+highlight, organizers only ever toggle expand/collapse and never look
+selected. Testing the built dashboard against a real fixture folder, the
+user rejected this: they want every row kind — including organizers — to
+selectable uniformly, because right-click actions (Phase 4) and other future
+per-row AI actions need "the current selection" to mean the same thing
+everywhere. Organizers now select **and** toggle expand on the same click.
+
+**Why:** a UX doc's reasoning about consistency and platform convention is
+still a hypothesis until it's actually used. The user's real, stated future
+need (uniform right-click targeting) is a concrete constraint the UX pass
+didn't have visibility into — it only knew Phase 2's scope, not Phase 4's.
+
+**How to apply:** treat UX-agent output as a strong first draft to build and
+react to, not a spec to defend once a human is actually clicking around.
+When live feedback contradicts it, the live feedback wins — update the code
+and record why here, don't just patch silently. Also apply this same
+"selection is uniform, click-driven" pattern in Phase 4 (right-click) rather
+than reinventing per-kind rules again.
+
+## Nested organizers are reclassified entirely, not just flagged
+
+The original design (per `ux-notes-list-architecture.md`) kept a nested
+`.organize` folder classified as `.organizer` (with a dashed outline and a
+caption) so it could still show its own contents. The user rejected this on
+sight: "it simply shouldn't be identified as organizer at all, just as a
+mistake." `NodeKind` now has a fourth case, `.invalidNestedOrganizer` —
+`FolderScanner` never scans its children, and it has no expand/collapse or
+click-to-toggle behavior at all; it's a non-interactive row with a triangle
+glyph and an explanatory subtitle. `nestedOrganizerWarning` still fires on
+the containing organizer for the same reason as before.
+
+**Why:** treating the nested folder as a functioning organizer (even with a
+visual caveat) implied it does something, which is exactly wrong — the
+right mental model is "this is a mistake to fix," full stop. This also
+incidentally fixed a real interaction bug: clicking the nested organizer's
+old chevron was interfering with the parent organizer's own expand state.
+
+**How to apply:** when a UX rule turns out to require a genuinely different
+*kind* of thing rather than a variant of an existing kind, add the enum
+case rather than bolting on another boolean flag — `isNestedInsideOrganizer`
+was removed in the same change for exactly this reason.
+
+## Selection highlight: soft tint, not a solid fill; click-away deselects
+
+The interaction doc called for "the standard macOS accent-color selection
+fill" at ~0.85 opacity. In practice this read as an overly bright, saturated
+blue. Selection is now a soft accent tint (`0.18` opacity when the window is
+key, `0.12` gray when inactive), and clicking empty space in the list clears
+the selection (`DashboardView`'s `ScrollView` carries its own tap gesture
+behind the rows).
+
+Also: making the row list `.focusable()` for `.onKeyPress` support drew
+macOS's default system focus ring around the *entire* scrollable area
+whenever it had keyboard focus — visually indistinguishable from "the whole
+UI is selected." Fixed with `.focusEffectDisabled()`, since the app already
+draws its own per-row cursor ring.
+
+**Why:** "standard" isn't automatically "right" for this app's density and
+mood — soft, low-opacity affordances read better at a glance across many
+rows. The focus-ring issue is a good example of an unintended side effect
+from a SwiftUI modifier (`.focusable()`) doing more than the one thing it
+was added for.
+
+**How to apply:** when adding `.focusable()` (or similar broad-effect
+modifiers) to a container for one specific reason, check what else it
+visually changes, not just whether the feature you wanted works.
+
 ## `.project`'s `claude_md_generated` is `null` for AI Control itself
 
 The global module-merge system (`PROJECT.md` §6.2) that generates

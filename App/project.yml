@@ -2,7 +2,7 @@ name: AIControl
 options:
   bundleIdPrefix: xyz.erdman
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "14.0"
 
 packages:
   AIControlCore:
@@ -21,7 +21,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: xyz.erdman.aicontrol
         PRODUCT_NAME: AI Control
-        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
         ENABLE_HARDENED_RUNTIME: NO
         CODE_SIGN_STYLE: Automatic
     info:

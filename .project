@@ -21,6 +21,7 @@ exist yet (this is the project building it), so `claude_md_generated` stays
 How to use: this project's own updates live in `updates/`, per its own
 `CLAUDE.md` conventions.
 
-Status: bootstrapping. Phase 0 (repo + tracking) and Phase 1 (core
-Project/Organizer scanning model) in progress. See
+Status: bootstrapping. Phase 0 (repo + tracking), Phase 1 (core
+Project/Organizer scanning model), and Phase 2 (dashboard UI) done. Next up
+is Phase 3 (project sidebar). See
 `updates/2026-09-20 INIT - OPEN/update v1.md` for the full roadmap and status.

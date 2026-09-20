@@ -25,6 +25,10 @@ final class FolderScannerTests: XCTestCase {
         try contents.write(to: url.appendingPathComponent(filename), atomically: true, encoding: .utf8)
     }
 
+    private func setModificationDate(_ date: Date, of url: URL) throws {
+        try fileManager.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+    }
+
     func testFolderWithProjectMarkerClassifiesAsProjectAndParsesFrontmatter() throws {
         let projectDir = try makeDir("my-project")
         try write("""
@@ -71,7 +75,7 @@ final class FolderScannerTests: XCTestCase {
         XCTAssertNil(nodes[0].projectFile)
     }
 
-    func testNestedOrganizerIsFlaggedRatherThanCrashingOrSilentlyNesting() throws {
+    func testNestedOrganizerIsFlaggedAsInvalidRatherThanTreatedAsAnOrganizer() throws {
         let outerDir = try makeDir("outer-organizer")
         try write("", to: outerDir, named: ".organize")
 
@@ -85,7 +89,65 @@ final class FolderScannerTests: XCTestCase {
         XCTAssertEqual(outer.kind, .organizer)
         XCTAssertTrue(outer.nestedOrganizerWarning)
         XCTAssertEqual(outer.children.count, 1)
-        XCTAssertEqual(outer.children[0].kind, .organizer)
+        XCTAssertEqual(outer.children[0].kind, .invalidNestedOrganizer)
+        XCTAssertTrue(outer.children[0].children.isEmpty, "invalid nested organizers aren't scanned for contents")
+    }
+
+    func testNestedOrganizerWithItsOwnProjectChildIsStillNotScanned() throws {
+        let outerDir = try makeDir("outer-organizer")
+        try write("", to: outerDir, named: ".organize")
+
+        let innerDir = try makeDir("outer-organizer/inner-organizer")
+        try write("", to: innerDir, named: ".organize")
+
+        let innerChildDir = try makeDir("outer-organizer/inner-organizer/some-project")
+        try write("---\nname: some-project\n---\n", to: innerChildDir, named: ".project")
+
+        let nodes = FolderScanner().scanRoot(at: rootURL)
+
+        let innerNode = nodes[0].children[0]
+        XCTAssertEqual(innerNode.kind, .invalidNestedOrganizer)
+        XCTAssertTrue(innerNode.children.isEmpty)
+    }
+
+    func testProjectLastActivityDateReflectsFolderModificationDate() throws {
+        let projectDir = try makeDir("timestamped-project")
+        try write("---\nname: timestamped-project\n---\n", to: projectDir, named: ".project")
+        let expectedDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try setModificationDate(expectedDate, of: projectDir)
+
+        let nodes = FolderScanner().scanRoot(at: rootURL)
+
+        XCTAssertEqual(nodes[0].lastActivityDate, expectedDate)
+    }
+
+    func testOrganizerLastActivityDateIsMaxOfChildren() throws {
+        let organizerDir = try makeDir("organizer")
+        try write("", to: organizerDir, named: ".organize")
+
+        let olderChild = try makeDir("organizer/older-project")
+        try write("---\nname: older-project\n---\n", to: olderChild, named: ".project")
+        try setModificationDate(Date(timeIntervalSince1970: 1_000), of: olderChild)
+
+        let newerChild = try makeDir("organizer/newer-project")
+        try write("---\nname: newer-project\n---\n", to: newerChild, named: ".project")
+        let newerDate = Date(timeIntervalSince1970: 2_000)
+        try setModificationDate(newerDate, of: newerChild)
+
+        let nodes = FolderScanner().scanRoot(at: rootURL)
+
+        XCTAssertEqual(nodes[0].lastActivityDate, newerDate)
+    }
+
+    func testOrganizerWithNoChildrenUsesOwnModificationDate() throws {
+        let organizerDir = try makeDir("empty-organizer")
+        try write("", to: organizerDir, named: ".organize")
+        let expectedDate = Date(timeIntervalSince1970: 1_500_000_000)
+        try setModificationDate(expectedDate, of: organizerDir)
+
+        let nodes = FolderScanner().scanRoot(at: rootURL)
+
+        XCTAssertEqual(nodes[0].lastActivityDate, expectedDate)
     }
 
     func testMalformedProjectFileDegradesGracefullyInsteadOfCrashing() throws {
