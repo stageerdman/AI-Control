@@ -1,0 +1,85 @@
+import Foundation
+import SwiftTerm
+
+/// A `LocalProcessTerminalView` that tees the raw process→terminal bytes to a
+/// callback before rendering them, so higher layers can observe output (Phase 5
+/// will use this for idle / awaiting-input detection). Overriding `dataReceived`
+/// is the supported hook — see `phase4-research.md`.
+final class TeeingTerminalView: LocalProcessTerminalView {
+    var onData: ((ArraySlice<UInt8>) -> Void)?
+
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        onData?(slice)
+        super.dataReceived(slice: slice)
+    }
+}
+
+/// One embedded Claude Code / shell session for a single project, wrapping a
+/// SwiftTerm PTY view. Owns the terminal view (so it survives navigation
+/// between the dashboard and the project view), launches a login shell in the
+/// project folder, and exposes the two capabilities PROJECT.md §11 requires:
+/// **send input** (`send(_:)`) and **read output** (`recentOutput` / the tee).
+final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate {
+    let projectURL: URL
+    let terminalView: TeeingTerminalView
+
+    @Published private(set) var isRunning = false
+    @Published private(set) var exitCode: Int32?
+
+    /// Bounded rolling tail of recent output, kept for later idle/awaiting-input
+    /// detection (Phase 5). Not the full scrollback — just enough to reason
+    /// about the current prompt state.
+    private(set) var recentOutput = ""
+    private let recentLimit = 8192
+
+    init(projectURL: URL) {
+        self.projectURL = projectURL
+        terminalView = TeeingTerminalView(frame: CGRect(x: 0, y: 0, width: 800, height: 480))
+        terminalView.processDelegate = self
+        terminalView.onData = { [weak self] slice in self?.appendRecent(slice) }
+        start()
+    }
+
+    /// Launches the user's **login** shell (`-l`) so it sources the profile and
+    /// sets `PATH` — SwiftTerm's default environment omits `PATH`, so a bare
+    /// shell wouldn't find `git`/`gh`/`claude` (see `phase4-research.md`).
+    func start() {
+        guard !isRunning else { return }
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        terminalView.startProcess(
+            executable: shell,
+            args: ["-l"],
+            environment: nil,
+            currentDirectory: projectURL.path
+        )
+        isRunning = true
+        exitCode = nil
+    }
+
+    /// Sends text to the child process as if typed (prompts, interrupts, exit).
+    func send(_ text: String) {
+        terminalView.send(txt: text)
+    }
+
+    private func appendRecent(_ slice: ArraySlice<UInt8>) {
+        guard let chunk = String(bytes: slice, encoding: .utf8) else { return }
+        recentOutput += chunk
+        if recentOutput.count > recentLimit {
+            recentOutput = String(recentOutput.suffix(recentLimit))
+        }
+    }
+
+    // MARK: - LocalProcessTerminalViewDelegate
+    // SwiftTerm may deliver these off the main thread; hop to main for @Published.
+
+    func processTerminated(source: TerminalView, exitCode: Int32?) {
+        DispatchQueue.main.async {
+            self.isRunning = false
+            self.exitCode = exitCode
+        }
+    }
+
+    func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+    func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+}

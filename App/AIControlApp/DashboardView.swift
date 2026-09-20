@@ -4,8 +4,19 @@ import AIControlCore
 struct DashboardView: View {
     @StateObject private var rootFolderStore = RootFolderStore()
     @StateObject private var viewModel: DashboardViewModel
+    @StateObject private var sessionStore = TerminalSessionStore()
     @State private var isChoosingFolder = false
+    @State private var openProject: OpenProject?
     @FocusState private var listIsFocused: Bool
+
+    /// The project currently shown full-window in the project view, paired with
+    /// its live terminal session. Created on double-click (not during body), so
+    /// the session store isn't mutated mid-render.
+    private struct OpenProject: Identifiable {
+        let node: AIControlNode
+        let session: TerminalSession
+        var id: URL { node.id }
+    }
 
     init() {
         let store = RootFolderStore()
@@ -14,6 +25,14 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        if let open = openProject {
+            ProjectView(node: open.node, session: open.session) { openProject = nil }
+        } else {
+            dashboard
+        }
+    }
+
+    private var dashboard: some View {
         Group {
             if !viewModel.hasRootFolder {
                 EmptyStateView(
@@ -69,6 +88,9 @@ struct DashboardView: View {
                         isCursor: viewModel.cursorID == row.id,
                         isSelected: viewModel.selectedID == row.id
                     )
+                    .onTapGesture(count: 2) {
+                        openProjectView(row)
+                    }
                     .onTapGesture {
                         viewModel.handleClick(on: row)
                     }
@@ -105,6 +127,15 @@ struct DashboardView: View {
     /// non-misleading (their captions say so).
     private func revealInFinder(_ node: AIControlNode) {
         NSWorkspace.shared.activateFileViewerSelecting([node.url])
+    }
+
+    /// Double-clicking a project opens its terminal session in the project
+    /// view (PROJECT.md §8.1/§8.3). Only projects have a session; other row
+    /// kinds are inert on double-click for now.
+    private func openProjectView(_ row: DashboardRow) {
+        guard row.node.kind == .project else { return }
+        viewModel.handleClick(on: row) // keep the selection in sync
+        openProject = OpenProject(node: row.node, session: sessionStore.session(for: row.node.url))
     }
 }
 

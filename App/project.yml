@@ -7,6 +7,9 @@ options:
 packages:
   AIControlCore:
     path: ..
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm.git
+    from: 1.2.0
 
 targets:
   AIControl:
@@ -17,6 +20,8 @@ targets:
     dependencies:
       - package: AIControlCore
         product: AIControlCore
+      - package: SwiftTerm
+        product: SwiftTerm
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: xyz.erdman.aicontrol
