@@ -42,6 +42,10 @@ struct AIControlApp: App {
                 Button("Open Global Config") { openWindow(id: GlobalConfigWindow.windowID) }
                     .keyboardShortcut(",", modifiers: .command)
             }
+            CommandMenu("AI") {
+                Button("Open AI") { openWindow(id: AIWindow.windowID) }
+                    .keyboardShortcut("\\", modifiers: .command)
+            }
         }
 
         Window("Global Config", id: GlobalConfigWindow.windowID) {
@@ -50,6 +54,10 @@ struct AIControlApp: App {
                 rootFolderStore: rootFolderStore,
                 sessionStore: sessionStore
             )
+        }
+
+        Window("AI", id: AIWindow.windowID) {
+            AIWindow(sessionStore: sessionStore, rootFolderStore: rootFolderStore)
         }
     }
 }

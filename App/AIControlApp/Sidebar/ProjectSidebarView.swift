@@ -224,9 +224,10 @@ private struct UntouchedDetail: View {
             VStack(alignment: .leading, spacing: 4) {
                 Button("Bring under AI Control") { onBringUnderControl(node) }
                     .buttonStyle(.bordered)
-                Text("The full adoption flow arrives with the AI window; for now this reveals the folder in Finder.")
+                Text("Sends the folder to the AI window; it reports what it is and what it'd change before touching anything.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             SidebarSection(title: "Details") {
@@ -259,7 +260,7 @@ private struct InvalidNestedDetail: View {
             VStack(alignment: .leading, spacing: 4) {
                 Button("Let AI fix it") { onLetAIFix(node) }
                     .buttonStyle(.bordered)
-                Text("The AI will read this folder with a predefined prompt and fix it. That arrives with the AI window; for now this reveals the folder in Finder.")
+                Text("Sends the folder to the AI window with a fix prompt; it proposes the fix and applies it if you agree.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)

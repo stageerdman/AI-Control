@@ -10,6 +10,7 @@ struct DashboardView: View {
     @ObservedObject var globalConfig: GlobalConfigStore
     @ObservedObject var alerts: SessionAlerts
     @State private var isChoosingFolder = false
+    @State private var isCreatingProject = false
     @State private var openProject: OpenProject?
     @State private var lastTap: (id: URL, at: Date)?
     @State private var scrollTarget: URL?
@@ -41,7 +42,10 @@ struct DashboardView: View {
 
             Group {
                 if let open = openProject {
-                    ProjectView(node: open.node, session: open.session) { openProject = nil }
+                    ProjectView(node: open.node, session: open.session) {
+                        openProject = nil
+                        viewModel.rescan() // pick up a just-created/changed .project
+                    }
                 } else {
                     dashboard
                 }
@@ -77,6 +81,9 @@ struct DashboardView: View {
             globalConfig.reload()
             viewModel.rescan()
         }
+        // An AI-window turn finished (e.g. an adopt/fix wrote markers) → rescan so
+        // the row reclassifies without a relaunch.
+        .onChange(of: sessionStore.aiActivityTick) { _, _ in viewModel.rescan() }
         .onChange(of: openProject?.id) { _, _ in syncAlerts() }
         .onChange(of: alerts.pendingOpenURL) { _, url in
             guard let url else { return }
@@ -107,7 +114,9 @@ struct DashboardView: View {
                 EmptyStateView(
                     systemImage: "tray",
                     title: "This folder is empty",
-                    message: "Add a project folder to get started."
+                    message: "Create your first project, or add folders to this location outside the app.",
+                    actionTitle: "New Project",
+                    action: { isCreatingProject = true }
                 )
             } else if viewModel.rows.isEmpty {
                 EmptyStateView(systemImage: "magnifyingglass", title: "No matches")
@@ -120,8 +129,8 @@ struct DashboardView: View {
                         node: viewModel.selectedNode,
                         globalConfig: globalConfig.config,
                         isRebuilding: viewModel.selectedNode.map { sessionStore.isRebuilding($0.url) } ?? false,
-                        onBringUnderControl: revealInFinder,
-                        onLetAIFix: revealInFinder,
+                        onBringUnderControl: adoptFolder,
+                        onLetAIFix: fixNesting,
                         onRebuild: rebuild,
                         onOpenSession: openSessionForNode
                     )
@@ -137,8 +146,30 @@ struct DashboardView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { isCreatingProject = true } label: {
+                    Label("New Project", systemImage: "plus")
+                }
+                .disabled(!viewModel.hasRootFolder)
+                .help(viewModel.hasRootFolder ? "New Project" : "Connect a root folder first.")
+            }
             ToolbarItem(placement: .automatic) {
                 Button("Choose Folder…") { isChoosingFolder = true }
+            }
+        }
+        .sheet(isPresented: $isCreatingProject) {
+            if let root = viewModel.rootURL {
+                NewProjectSheet(
+                    rootURL: root,
+                    organizers: viewModel.organizers,
+                    globalConfig: globalConfig.config,
+                    onSetUpConfig: { openWindow(id: GlobalConfigWindow.windowID) },
+                    onCreate: { dir, name, visibility, description in
+                        isCreatingProject = false
+                        createProject(at: dir, name: name, visibility: visibility, description: description)
+                    },
+                    onCancel: { isCreatingProject = false }
+                )
             }
         }
     }
@@ -164,6 +195,7 @@ struct DashboardView: View {
                             isRunning: sessionStore.runningURLs.contains(row.id),
                             isStopping: sessionStore.isStopping(row.id),
                             onSelect: { viewModel.select(row) },
+                            onAskAI: { askAI(row.node) },
                             onStop: { stopRoutine(row) },
                             onForceClose: { closeSession(row) }
                         )
@@ -206,12 +238,49 @@ struct DashboardView: View {
         rootFolderStore.expandedIDs.contains(row.id)
     }
 
-    /// Interim behavior for the AI-driven actions (adopt an untouched folder,
-    /// fix an invalid nested organizer) until the AI window (Phase 4+) exists:
-    /// reveal the folder in Finder, so the buttons do something real and
-    /// non-misleading (their captions say so).
-    private func revealInFinder(_ node: AIControlNode) {
-        NSWorkspace.shared.activateFileViewerSelecting([node.url])
+    /// Bring an untouched folder under AI Control (§9.3): send the report-first
+    /// adopt prompt + path to the AI window and raise it. The AI reports a verdict
+    /// and applies changes on the user's "yes" — the app touches nothing.
+    private func adoptFolder(_ node: AIControlNode) {
+        guard let root = viewModel.rootURL else { return }
+        sessionStore.adopt(folderURL: node.url, rootURL: root)
+        openWindow(id: AIWindow.windowID)
+    }
+
+    /// Fix an invalid nested organizer via the AI window (adopt prompt + fix
+    /// appendix).
+    private func fixNesting(_ node: AIControlNode) {
+        guard let root = viewModel.rootURL else { return }
+        sessionStore.fixNesting(folderURL: node.url, rootURL: root)
+        openWindow(id: AIWindow.windowID)
+    }
+
+    /// Right-click "Ask AI…": hand the folder to the AI window. Untouched/invalid
+    /// folders get the directed adopt/fix prompt; projects/organizers get an
+    /// editable pre-filled reference line (§8.4).
+    private func askAI(_ node: AIControlNode) {
+        guard let root = viewModel.rootURL else { return }
+        switch node.kind {
+        case .untouched: sessionStore.adopt(folderURL: node.url, rootURL: root)
+        case .invalidNestedOrganizer: sessionStore.fixNesting(folderURL: node.url, rootURL: root)
+        default: sessionStore.askAI(about: node.url, rootURL: root)
+        }
+        openWindow(id: AIWindow.windowID)
+    }
+
+    /// New Project (§9.2): create the empty target dir + open its AI session, then
+    /// show it full-window so the user watches the AI build it. A synthetic
+    /// `.project` node stands in until the scan picks up the real `.project`
+    /// marker; on return we rescan so the row appears.
+    private func createProject(at dir: URL, name: String, visibility: String, description: String) {
+        guard let session = sessionStore.startNewProject(at: dir, name: name, visibility: visibility, initDescription: description) else {
+            // Directory already existed (lost the race) — reopen the form so the
+            // name can be changed; never send the prompt into a non-empty folder.
+            isCreatingProject = true
+            return
+        }
+        let node = AIControlNode(url: dir, kind: .project, lastActivityDate: Date())
+        openProject = OpenProject(node: node, session: session)
     }
 
     /// Rebuild CLAUDE.md: sends the stored prompt into the project's own session

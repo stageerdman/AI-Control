@@ -501,3 +501,62 @@ the running/awaiting machinery. It won't render as a dashboard row (no matching
 node), but an awaiting-input notification could fire during the interview since
 the sheet isn't the dashboard's `openProject`. Acceptable for MVP; revisit if the
 global/root session deserves its own first-class "AI window" (§8.4).
+
+## Phase 7 — New project, the AI window, and adopt: one root-session pattern
+
+**The AI window is the general root-scoped session; per-project sessions stay
+per-project.** §8.4's "AI window" is a `Window("AI")` scene (third consumer of
+the app-scope `@StateObject` injection pattern) hosting one Claude session keyed
+on the *project root* folder via `aiWindowSession(rootURL:)`. It's added to
+`globalSessionURLs`, so it's excluded from pins/notifications/badge — which also
+retired the Phase-6 "phantom 'project is waiting'" rough edge: the root/global
+session finally has a first-class home. The module-authoring interview
+(`~/.ai-control`) and the AI window (`/dev`-style root) are different URLs → two
+different global sessions, no collision.
+
+**Three entry points, one mechanism, two behaviors.** The wiki's earlier
+prediction held: the two interim `revealInFinder` closures split into their real
+targets. Right-click **Ask AI…** (every row), sidebar **Bring under AI Control**
+(untouched), and **Let AI fix it** (invalid nested) all (1) raise the AI window
+and (2) hand it the folder — differing only in text: untouched/invalid →
+**directed auto-send** of `RoutinePromptKind.adopt` (+ path or fix appendix) via
+`onReady`(fresh)/`sendLine`(existing), mirroring `rebuildClaudeMd`;
+project/organizer → **general pre-fill** typed with `send()` and NO trailing `\r`
+so the user edits/sends it. The report-first `adopt` prompt already frames
+verdict→confirm→apply, so the user's "yes" is a real CLI turn — the app never
+mediates the change (principle 2).
+
+**New Project: the app's only write is an empty `mkdir`.** The form
+(`NewProjectSheet`, validated by the core `NewProjectValidator`) collects
+name/location/visibility/INIT. On submit the app creates the **empty** target
+dir and opens a session keyed to it (`startNewProject`), then sends the
+`newProject` prompt + an appended param/INIT block on `onReady`. Keying the
+session to the new dir (not the parent) is essential — session/status/Stop and
+the full-window `ProjectView` are all keyed on one URL; if we opened at the
+parent and let the AI `mkdir`, the project would never get its own tracked
+session. Empty-dir creation is structure-not-content, consistent with
+`createSkeleton()`. A **synthetic `AIControlNode(kind:.project)`** stands in for
+`openProject` until the scan sees the real `.project` marker (ProjectView only
+reads name/url), and rescan-on-return surfaces the row.
+
+**Reclassify-after-apply without FSEvents: an idle tick on the global session.**
+`advanceGlobalSession` watches the AI-window session go working→awaiting and
+bumps `aiActivityTick`; the dashboard rescans on that change, so an adopt/fix
+that wrote `.project`/`.organize` reclassifies the row live. This is the same
+completion-tracking shape as the Rebuild self-heal, applied to the shared root
+session. (Switching between app windows doesn't fire `scenePhase`, so relying on
+rescan-on-activate alone wouldn't refresh while the user stays in-app — the tick
+covers that.)
+
+**Live-test flag (unverified):** the general Ask-AI pre-fill types a line via
+`send()` **without** Enter, betting Claude's TUI shows it as editable inline text
+rather than a "pasted N lines" pill (`sendLine` splits the `\r` off for the
+opposite reason). If it renders as a paste pill, fall back to auto-sending the
+short reference line via `sendLine`. Decide by driving the real TUI.
+
+**Menu-bar over toolbar for companion windows (user preference).** Per live
+feedback in Phase 6 (the rejected Global Config gear), both companion windows
+open from top-level menu-bar menus — `CommandMenu("Global Config")` (⌘,) and
+`CommandMenu("AI")` (⌘\\) — plus auto-raise on action, rather than adding toolbar
+icons. New Project stays a toolbar button (a primary creative action, not a
+config surface).

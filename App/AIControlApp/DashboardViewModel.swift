@@ -45,6 +45,10 @@ final class DashboardViewModel: ObservableObject {
     var rootURL: URL? { rootFolderStore.rootURL }
     var hasRootFolder: Bool { rootFolderStore.rootURL != nil }
 
+    /// Top-level organizers — the valid non-root Location targets for a new
+    /// project (§9.2). Nested organizers and projects are never targets.
+    var organizers: [AIControlNode] { nodes.filter { $0.kind == .organizer } }
+
     init(
         rootFolderStore: RootFolderStore,
         scanner: FolderScanner = FolderScanner()

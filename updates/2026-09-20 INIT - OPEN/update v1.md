@@ -34,7 +34,7 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**Phases 0–5.1 and Phase 6: done.**
+**Phases 0–5.1, Phase 6, and Phase 7: done (Phase 7 awaiting live verification).**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
@@ -233,6 +233,43 @@ Deferred from Phase 6 (by design):
 - **Live-watching** module edits is currently a re-read on app-activate +
   post-rebuild rather than a recursive FSEvents watcher — enough for the flow,
   revisit if it feels stale in use.
+
+Phase 7 (New project / adopt flows + AI window) — done, awaiting live test:
+- Two UX-specialist passes first (`ux-notes-new-project.md`,
+  `ux-notes-ai-window-adopt.md`).
+- **Core:** `NewProjectValidator` (empty/invalid/taken name, empty description)
+  + 8 tests → **71 total pass**.
+- **New Project (§9.2):** a **New Project** toolbar button (gated on a connected
+  root) + the empty-state action open a form sheet (`NewProjectSheet`): name /
+  location (root or organizer) / visibility / required INIT description, live-
+  validated. On submit the app creates the **empty** target dir and opens a keyed
+  session there (`startNewProject`), sending the `newProject` prompt + a
+  param/INIT appendix on `onReady`; the project opens full-window (`ProjectView`,
+  synthetic node) so the build is watched live; rescan-on-return surfaces the row.
+- **AI window (§8.4):** a dedicated `Window("AI")` scene (top-bar **AI** menu,
+  ⌘\\, and auto-raised by AI actions) hosting one persistent root-scoped session
+  via `aiWindowSession(rootURL:)`, tracked in `globalSessionURLs` so it never
+  pins/notifies — this also retires Phase 6's "phantom notification" rough edge.
+  Header shows a **reference chip** (folder handed in) with clear/▢ + path
+  tooltip.
+- **Right-click "Ask AI…"** on every row (`RowRightClick` now always pops a menu;
+  Stop/Force Close appended when running). Behavior branches on kind: untouched →
+  `adopt`, invalid-nested → `fixNesting`, project/organizer → editable pre-filled
+  reference line.
+- **Adopt/fix (§9.3):** the sidebar **Bring under AI Control** / **Let AI fix it**
+  buttons now send the report-first `adopt` prompt (+ path / fix appendix) to the
+  AI window instead of revealing in Finder; captions updated. The AI reports a
+  verdict, applies on the user's "yes" (principle 2), and the dashboard rescans
+  on the AI-session idle tick so the row reclassifies.
+- Builds; app authors nothing (the only app writes are the empty New-Project dir
+  and, earlier, the config skeleton — structure, never content).
+
+Live-test flags carried from the specs: **pre-fill-without-submit** (the general
+Ask-AI line typed via `send()` without Enter) is unverified against the real
+`claude` TUI — if it collapses into a paste pill, fall back to auto-sending the
+short reference line. A dedicated `fixNestedOrganizer` prompt is deferred (reuses
+`adopt` + fix appendix). FSEvents live-refresh still deferred (rescan on
+return/activate/AI-idle-tick for now).
 
 Still deferred (not Phase 5 scope):
 - The one-shot working→awaiting entry *pulse* animation — left to tune during
