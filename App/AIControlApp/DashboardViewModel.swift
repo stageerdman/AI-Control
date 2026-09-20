@@ -32,6 +32,11 @@ final class DashboardViewModel: ObservableObject {
     /// (PROJECT.md §8.1). Fed from the `TerminalSessionStore`.
     private var runningURLs: Set<URL> = []
 
+    /// Running projects whose session is awaiting the user's reply. Sorted to the
+    /// top of the pinned group so the top of the list is the actionable queue
+    /// (Phase 5 UX pass). Fed from the `TerminalSessionStore`.
+    private var awaitingInputURLs: Set<URL> = []
+
     private let rootFolderStore: RootFolderStore
     private let scanner: FolderScanner
     private var nodes: [AIControlNode] = []
@@ -133,6 +138,14 @@ final class DashboardViewModel: ObservableObject {
         rebuildRows()
     }
 
+    /// Updates which running projects are awaiting the user's reply (sorted to
+    /// the top of the pinned group).
+    func setAwaitingInputURLs(_ urls: Set<URL>) {
+        guard urls != awaitingInputURLs else { return }
+        awaitingInputURLs = urls
+        rebuildRows()
+    }
+
     /// Finds a node by URL across top-level nodes and organizer children
     /// (the tree is only ever two levels deep — no nested organizers).
     private func findNode(withID id: URL) -> AIControlNode? {
@@ -186,10 +199,18 @@ final class DashboardViewModel: ObservableObject {
         pinnedRunningCount = 0
         guard !runningURLs.isEmpty, searchQuery.isEmpty else { return base }
 
+        // Awaiting-input sessions first (the actionable queue), then working
+        // ones; within each group, most-recent first. Single group, no extra
+        // divider between the two — the ordering alone conveys it (UX pass).
         let pinnedNodes = runningURLs
             .compactMap { findNode(withID: $0) }
             .filter { $0.kind == .project }
-            .sorted { $0.lastActivityDate > $1.lastActivityDate }
+            .sorted { lhs, rhs in
+                let lAwaiting = awaitingInputURLs.contains(lhs.id)
+                let rAwaiting = awaitingInputURLs.contains(rhs.id)
+                if lAwaiting != rAwaiting { return lAwaiting }
+                return lhs.lastActivityDate > rhs.lastActivityDate
+            }
 
         guard !pinnedNodes.isEmpty else { return base }
 

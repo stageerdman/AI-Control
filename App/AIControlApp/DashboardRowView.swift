@@ -12,6 +12,9 @@ struct DashboardRowView: View {
     let isCursor: Bool
     let isSelected: Bool
     var isRunning: Bool = false
+    /// Running session that has finished responding and is waiting for the user
+    /// (PROJECT.md §7/§8.1). Only meaningful when `isRunning`.
+    var isAwaitingInput: Bool = false
 
     @Environment(\.controlActiveState) private var controlActiveState
 
@@ -64,16 +67,28 @@ struct DashboardRowView: View {
             }
 
             // Running-session indicator (PROJECT.md §8.1). The slot is always
-            // reserved so rows don't reflow when a session starts/stops.
+            // reserved (16pt) so rows don't reflow when a session starts/stops
+            // or switches between working and awaiting-input. Shape carries the
+            // meaning — an accent arrow ("your turn") vs. a calm green dot
+            // ("busy") — reusing the app's one sanctioned accent rather than
+            // introducing a new alarm color (per the Phase 5 UX pass).
             Group {
-                if isRunning {
+                if isRunning && isAwaitingInput {
+                    Image(systemName: "arrowshape.right.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .transition(.scale(scale: 0.6).combined(with: .opacity))
+                        .help("Waiting for your reply")
+                } else if isRunning {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 8, height: 8)
+                        .transition(.opacity)
                         .help("Session running")
                 }
             }
             .frame(width: 16)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isAwaitingInput)
         }
         .padding(.leading, CGFloat(row.depth) * 16)
         .padding(.vertical, 4)

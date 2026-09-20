@@ -65,8 +65,12 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 360)
-        .onAppear { viewModel.setRunningURLs(sessionStore.runningURLs) }
+        .onAppear {
+            viewModel.setRunningURLs(sessionStore.runningURLs)
+            viewModel.setAwaitingInputURLs(sessionStore.awaitingInputURLs)
+        }
         .onChange(of: sessionStore.runningURLs) { _, newValue in viewModel.setRunningURLs(newValue) }
+        .onChange(of: sessionStore.awaitingInputURLs) { _, newValue in viewModel.setAwaitingInputURLs(newValue) }
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "Search")
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
@@ -89,7 +93,8 @@ struct DashboardView: View {
                         isExpanded: isExpandedOrganizer(row),
                         isCursor: viewModel.cursorID == row.id,
                         isSelected: viewModel.selectedID == row.id,
-                        isRunning: sessionStore.runningURLs.contains(row.id)
+                        isRunning: sessionStore.runningURLs.contains(row.id),
+                        isAwaitingInput: sessionStore.awaitingInputURLs.contains(row.id)
                     )
                     .onTapGesture {
                         handleRowTap(row)
