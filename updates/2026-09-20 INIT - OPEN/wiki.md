@@ -216,3 +216,42 @@ async work in the sidebar (session-log reads, `gh` calls). SwiftUI has no
 built-in wrapping stack, so secret-name chips use a small hand-rolled
 `FlowLayout` (`Layout` protocol, macOS 14+) in `SidebarComponents.swift` —
 reuse it for any other wrapping token rows.
+
+## Live-feedback revision of the sidebar content (post-build)
+
+The UX pass's layout was built and shown, then the user reshaped the content
+against the real thing (the established pattern — see the asymmetric-selection
+lesson above). The calls, so the next phase doesn't relitigate them:
+- **Visibility lives in the Git section**, not Details — it's the GitHub
+  repo's public/private state, so it belongs with the GitHub connection.
+- **Activity shows only "Folder modified" (real) + "Tokens consumed"
+  (placeholder).** No "last chat" row at all — the user doesn't want chat
+  timestamps surfaced, only recency-of-modification and token usage.
+- **Details is nearly empty and that's fine:** modules aren't a surfaced
+  concept (removed), CLAUDE.md provenance belongs to Maintenance (removed),
+  visibility moved to Git. Only `adopted` remains, and the section hides when
+  even that is absent. Don't reintroduce a `modules:` display.
+- **No file paths in the sidebar.** The untouched Path row was cut — the user
+  saw no reason to look at a path there. Opening a folder in Finder becomes a
+  **right-click** action in a later phase, not sidebar chrome.
+
+## The two "AI action" buttons are one pattern: predefined-prompt → AI
+
+"Bring under AI Control" (untouched) and "Let AI fix it" (invalid nested
+organizer) are the same mechanism: hand the folder path plus a *predefined
+prompt* to the AI, which reads the folder and does the work (adopt it / fix
+the nesting). The app itself never edits files (`PROJECT.md` §12) — the fix is
+always a Claude Code conversation. This generalizes: expect more of these
+predefined-prompt actions (rebuild CLAUDE.md, sync secrets, new update — the
+routine prompts of §8.6).
+
+**Interim (Phase 3):** the AI window doesn't exist until Phase 4, so both
+buttons currently just reveal the folder in Finder, with a caption stating the
+real AI-driven flow is coming. Both are wired to one `revealInFinder` closure
+in `DashboardView`; when the AI window lands, split them to send their
+respective predefined prompts to it.
+
+**How to apply:** when the AI window exists, model these as
+`(folderURL, promptKind)` sent to the dashboard AI session, and route the
+right-click menu's AI action through the same path — don't invent per-action
+plumbing.
