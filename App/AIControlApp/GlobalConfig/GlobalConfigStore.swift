@@ -43,6 +43,29 @@ final class GlobalConfigStore: ObservableObject {
         config.prompt(kind.key) ?? kind.defaultText
     }
 
+    /// Whether the stored prompt file differs from the built-in default (a
+    /// missing file, or one equal to the default, both read as "Default").
+    func isPromptEdited(_ kind: RoutinePromptKind) -> Bool {
+        guard let stored = config.prompt(kind.key) else { return false }
+        return stored != kind.defaultText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Folder/file locations, for Reveal-in-Finder / Open-in-editor.
+    var modulesURL: URL { root.appendingPathComponent(GlobalConfigLocator.subdirectories.modules, isDirectory: true) }
+    var wikiURL: URL { root.appendingPathComponent(GlobalConfigLocator.subdirectories.wiki, isDirectory: true) }
+    var promptsURL: URL { root.appendingPathComponent(GlobalConfigLocator.subdirectories.prompts, isDirectory: true) }
+    var envURL: URL { root.appendingPathComponent(GlobalConfigLocator.envFileName) }
+    var readmeURL: URL { root.appendingPathComponent("README.md") }
+
+    /// The on-disk file for a prompt, materialized from its default if the repo
+    /// exists but the file is missing — so "Open in editor" always has a file
+    /// (e.g. `author-modules.md` for a repo created before it was added).
+    func promptFileURL(for kind: RoutinePromptKind) -> URL {
+        let url = promptsURL.appendingPathComponent("\(kind.key).md")
+        if config.exists { try? writeIfAbsent(kind.defaultText + "\n", to: url) }
+        return url
+    }
+
     // MARK: - First-launch skeleton bootstrap
 
     /// Creates the repo skeleton: `modules/`, `wiki/`, `prompts/` (seeded with

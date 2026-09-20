@@ -6,7 +6,9 @@ import SwiftUI
 /// awaiting-input; this is quiet setup guidance, not an alarm. It disappears
 /// permanently once the skeleton exists.
 struct GlobalConfigBanner: View {
-    let onCreate: () -> Void
+    /// Opens the Global Config window rather than creating silently — the create
+    /// action lives in that window where its result stays visible.
+    let onSetUp: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -17,7 +19,7 @@ struct GlobalConfigBanner: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Button("Create global config", action: onCreate)
+            Button("Set up…", action: onSetUp)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         }

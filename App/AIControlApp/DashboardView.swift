@@ -2,17 +2,20 @@ import SwiftUI
 import AIControlCore
 
 struct DashboardView: View {
-    @StateObject private var rootFolderStore = RootFolderStore()
-    @StateObject private var viewModel: DashboardViewModel
-    @StateObject private var sessionStore = TerminalSessionStore()
-    @StateObject private var globalConfig = GlobalConfigStore()
-    @StateObject private var alerts = SessionAlerts()
+    // Owned by the app scene (so the Global Config window shares them); observed
+    // here.
+    @ObservedObject var rootFolderStore: RootFolderStore
+    @ObservedObject var viewModel: DashboardViewModel
+    @ObservedObject var sessionStore: TerminalSessionStore
+    @ObservedObject var globalConfig: GlobalConfigStore
+    @ObservedObject var alerts: SessionAlerts
     @State private var isChoosingFolder = false
     @State private var openProject: OpenProject?
     @State private var lastTap: (id: URL, at: Date)?
     @State private var scrollTarget: URL?
     @FocusState private var listIsFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
 
     /// The project currently shown full-window in the project view, paired with
     /// its live terminal session. Created on double-click (not during body), so
@@ -23,11 +26,6 @@ struct DashboardView: View {
         var id: URL { node.id }
     }
 
-    init() {
-        let store = RootFolderStore()
-        _rootFolderStore = StateObject(wrappedValue: store)
-        _viewModel = StateObject(wrappedValue: DashboardViewModel(rootFolderStore: store))
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,7 +53,6 @@ struct DashboardView: View {
         // updating while the user is inside a project view too.
         .onAppear {
             alerts.requestAuthorization()
-            sessionStore.globalConfig = globalConfig
             viewModel.setRunningURLs(sessionStore.runningURLs)
             viewModel.setAwaitingInputURLs(sessionStore.awaitingInputURLs)
             syncAlerts()
@@ -91,7 +88,7 @@ struct DashboardView: View {
     private var dashboard: some View {
         VStack(spacing: 0) {
             if viewModel.hasRootFolder && !globalConfig.isSetUp {
-                GlobalConfigBanner(onCreate: createGlobalConfig)
+                GlobalConfigBanner(onSetUp: { openWindow(id: GlobalConfigWindow.windowID) })
             }
             dashboardBody
         }
@@ -142,6 +139,14 @@ struct DashboardView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button("Choose Folder…") { isChoosingFolder = true }
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    openWindow(id: GlobalConfigWindow.windowID)
+                } label: {
+                    Label("Global Config", systemImage: "gearshape")
+                }
+                .help("Global Config")
             }
         }
     }
@@ -215,12 +220,6 @@ struct DashboardView: View {
     /// non-misleading (their captions say so).
     private func revealInFinder(_ node: AIControlNode) {
         NSWorkspace.shared.activateFileViewerSelecting([node.url])
-    }
-
-    /// Creates the global-config repo skeleton (PROJECT.md §6, §9.1) and reloads.
-    /// Best-effort: a filesystem failure just leaves the banner in place.
-    private func createGlobalConfig() {
-        try? globalConfig.createSkeleton()
     }
 
     /// Rebuild CLAUDE.md: sends the stored prompt into the project's own session
@@ -312,5 +311,12 @@ struct DashboardView: View {
 }
 
 #Preview {
-    DashboardView()
+    let root = RootFolderStore()
+    return DashboardView(
+        rootFolderStore: root,
+        viewModel: DashboardViewModel(rootFolderStore: root),
+        sessionStore: TerminalSessionStore(),
+        globalConfig: GlobalConfigStore(),
+        alerts: SessionAlerts()
+    )
 }

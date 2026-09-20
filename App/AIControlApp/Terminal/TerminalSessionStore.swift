@@ -184,6 +184,21 @@ final class TerminalSessionStore: ObservableObject {
     /// Whether a Rebuild prompt is currently in flight for `url`.
     func isRebuilding(_ url: URL) -> Bool { rebuilding[url] != nil }
 
+    /// Starts (or reuses) a Claude session at `dir` and — only if it's freshly
+    /// started — sends the author-modules interview prompt (PROJECT.md §6.2,
+    /// Option C). Returns the session so the caller can present its terminal for
+    /// the interview. The AI writes the module files; the app writes nothing.
+    @discardableResult
+    func authorModules(at dir: URL) -> TerminalSession {
+        let isNew = sessions[dir] == nil
+        let session = session(for: dir)
+        if isNew {
+            let prompt = globalConfig?.promptText(for: .authorModules) ?? RoutinePromptKind.authorModules.defaultText
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { session.sendLine(prompt) }
+        }
+        return session
+    }
+
     /// Advances an in-flight Rebuild: once Claude has picked up the prompt
     /// (`working`) and then returns to `awaitingInput`, it's done — clear the
     /// flag so the drift row can self-heal from the rewritten `.project`.

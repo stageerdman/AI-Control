@@ -19,8 +19,9 @@ final class TeeingTerminalView: LocalProcessTerminalView {
 /// between the dashboard and the project view), launches a login shell in the
 /// project folder, and exposes the two capabilities PROJECT.md §11 requires:
 /// **send input** (`send(_:)`) and **read output** (`recentOutput` / the tee).
-final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate {
+final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate, Identifiable {
     let projectURL: URL
+    var id: URL { projectURL }
     let terminalView: TeeingTerminalView
 
     @Published private(set) var isRunning = false

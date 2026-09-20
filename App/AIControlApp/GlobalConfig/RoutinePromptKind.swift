@@ -13,6 +13,7 @@ enum RoutinePromptKind: String, CaseIterable {
     case newProject = "new-project"
     case adopt
     case newUpdate = "new-update"
+    case authorModules = "author-modules"
 
     var key: String { rawValue }
 
@@ -25,6 +26,7 @@ enum RoutinePromptKind: String, CaseIterable {
         case .newProject: return "New project setup"
         case .adopt: return "Bring existing project under AI Control"
         case .newUpdate: return "New update"
+        case .authorModules: return "Author global modules"
         }
     }
 
@@ -80,6 +82,19 @@ enum RoutinePromptKind: String, CaseIterable {
             `updates/YYYY-MM-DD <NAME> - OPEN/` (today's date) with `update v1.md` \
             (goal, phased roadmap, status tracking) and `wiki.md` (decisions and \
             lessons), using the name and definition below. Then commit.
+            """
+        case .authorModules:
+            return """
+            Interview me briefly to author the global modules in \
+            ~/.ai-control/modules/. Ask a short, focused set of questions — my \
+            default stack and languages, my git/commit/testing discipline, my \
+            folder-structure conventions, and my UX taste (and whether most of my \
+            projects even have a UI). Keep it to a handful of questions. Then write \
+            UX.md, WORKFLOW.md, STRUCTURE.md and CODING.md, each beginning with a \
+            one-sentence usage description on its first line so the wiki search and \
+            CLAUDE.md generation can tell what each is for. Base them on my answers \
+            and on PROJECT.md's conventions — these are my standing rules, not a \
+            template. When done, commit.
             """
         }
     }
