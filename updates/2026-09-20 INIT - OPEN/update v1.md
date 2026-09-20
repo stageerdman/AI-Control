@@ -34,7 +34,7 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**Phase 0, Phase 1, and Phase 2: done.**
+**Phase 0, Phase 1, Phase 2, and Phase 3: done.**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
@@ -70,6 +70,30 @@ Decisions made:
   also toggle expand) — overriding the UX doc's original asymmetric design,
   per direct user feedback while testing. See `wiki.md`.
 
-Next (Phase 3 — Project sidebar):
-- Description, out-of-date flags, secret names, GitHub/git status, issues
-  list for the currently selected row.
+Phase 3 (Project sidebar) — done:
+- Core: `GitStatus` model + pure `GitStatusParser` (parses `git status
+  --porcelain=v2 --branch` + a nul-separated one-line `git log`) + thin
+  `GitStatusReader` that runs read-only `git` via `Process`. 12 new tests
+  (9 parser, 3 reader integration against a temp repo, skipped if git is
+  absent); 40 total pass.
+- UI: right-hand `HSplitView` detail pane driven by the dashboard
+  selection, with four kind-specific variants + an empty state. A UX
+  specialist pass designed it first, respecting the honesty constraint —
+  see `wiki.md`. Reusable components under `App/AIControlApp/Sidebar/`.
+- Project variant shows: description, a live Git section, secret-name
+  chips (names only), honest "not available yet" placeholders for
+  CLAUDE.md drift / secret sync / chat-token activity, and `.project`
+  details. Git status read off-main-thread with a token guard.
+- Deferred as designed (honest placeholders, no faked status): CLAUDE.md
+  drift + secret sync (need global config, Phase 6), last chat + tokens
+  (need session-log parsing, Phase 10 data), and the untouched-folder
+  "Bring under AI Control" flow (Phase 9.3 — reveals in Finder for now).
+
+Next (Phase 4 — Terminal embedding):
+- SwiftTerm-based PTY session per project; app can send input and read
+  output. This is the first research-flavored phase (new API) — per
+  CLAUDE.md principle 3, start with an isolated experiment inside this
+  update's folder before touching the main app.
+- Note: `issues.txt` display (PROJECT.md §5.4) belongs to the double-click
+  **project view** (§8.3), not the single-click sidebar — it was folded
+  into the original Phase 3 line but is really a project-view concern.

@@ -150,3 +150,69 @@ instructions before it exists.
 built, revisit whether AI Control should manage its own `CLAUDE.md` through
 its own module system, or keep it hand-authored permanently as a special
 case.
+
+## Git reading is split: pure parser (tested) + thin Process wrapper (not)
+
+`GitStatusReader` runs read-only `git` via `Process` and hands raw stdout to
+`GitStatusParser`, which is a pure function with no I/O. All interpretation —
+porcelain=v2 header parsing, ahead/behind, dirty-file counting, last-commit
+splitting — lives in the parser and has 9 unit tests; the reader has 3
+integration tests that spin up a real temp repo (and `XCTSkip` when `git`
+isn't on the box).
+
+**Why:** the same split as `AIControlCore` overall (principle 4) — the risky,
+detail-heavy logic becomes testable without spawning subprocesses, and the
+only untested surface is the ~10 lines that launch `git`. Porcelain v2 is a
+fixed, documented grammar, so a string→struct parser is exhaustively testable.
+
+**How to apply:** reuse this shape for the other shell-outs coming later
+(`gh` for GitHub status, Claude Code session-log reading): a pure parser over
+captured output + a thin runner. Nul-separate multi-field command output
+(`--format=%h%x00%s%x00%cI`) so values containing spaces/commas survive.
+
+## The sidebar never fakes a status — honest placeholders for deferred data
+
+Half of what PROJECT.md §8.2 asks the sidebar to show can't be computed yet:
+CLAUDE.md drift and secret sync need the global `~/.ai-control/` config
+(Phase 6), and last-chat-time + token usage need Claude Code session-log
+parsing (Phase 10 data). The UX pass's central call — which we kept — was to
+render these as *reserved layout with a neutral, uncolored "— not available
+yet" note*, never an invented green/red or a disabled button. The absence of
+a status color is itself the honest signal.
+
+Two concrete honesty rules that fell out of it:
+- The dashboard's recency stamp is folder modification time, not chat time
+  (see the placeholder-recency lesson above). The sidebar labels it **"Folder
+  modified"**, never "Last chat" — it must not launder the placeholder into a
+  claim about activity. `claude_md_generated == null` *is* truthful today, so
+  that row says "Not generated yet" rather than "not available yet".
+- No dead buttons. The UX doc's rule "an absent action is invisible, a
+  placeholder is a thing users file bugs against" means the Maintenance
+  Rebuild/Sync buttons are simply **not rendered** until they work. The one
+  action shown now (untouched folder's "Bring under AI Control") does
+  something real — reveals the folder in Finder — with a caption saying the
+  full adoption flow comes with the AI window, rather than being a no-op.
+
+**How to apply:** any later phase that fills one of these in is a drop-in —
+the row's home and label already exist; it just swaps the placeholder note for
+real status and, only when a real out-of-date state exists, reveals the
+action button. Don't reshuffle the section order to do it.
+
+## HSplitView + a token-guarded background git read for the detail pane
+
+The sidebar is the right pane of an `HSplitView`; the list keeps layout
+priority and a larger ideal width. Selecting a row triggers a git read on a
+detached `Task`, and the result is discarded unless a per-selection `UUID`
+token still matches — so a slow read for a row you've already clicked off of
+can't overwrite the current pane. `selectedGitStatus == nil` renders a small
+"Reading…" state; a non-repo folder resolves to `.notARepository`, not `nil`.
+
+**Why:** `git` on a large repo isn't instant, and the selection can change
+faster than a read completes. The token guard is simpler and less bug-prone
+than cancellation, and keeps `DashboardViewModel` `@MainActor`-clean.
+
+**How to apply:** the same token-guard pattern fits any future per-selection
+async work in the sidebar (session-log reads, `gh` calls). SwiftUI has no
+built-in wrapping stack, so secret-name chips use a small hand-rolled
+`FlowLayout` (`Layout` protocol, macOS 14+) in `SidebarComponents.swift` —
+reuse it for any other wrapping token rows.
