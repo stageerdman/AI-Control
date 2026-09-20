@@ -131,10 +131,14 @@ Phase 5 (Session management) — done:
 - **Stop routine** (§7/§9.7): right-click **Stop** interrupts, sends the
   wrap-up prompt, waits for the `Stop` hook, then `/exit`s and closes;
   **Force Close** keeps the immediate kill. 300s timeout backstop.
-- **Auto-permission** (§11): Claude launches under `bypassPermissions` from
-  the app-owned settings file — no approval ceremony (§4).
-- Requires a **live build test** by the user (see below); logic-level pieces
-  are unit-tested (47 total) and the app builds.
+- **Auto-permission** (§11): Claude launches with
+  `--dangerously-skip-permissions` — no approval ceremony (§4). (The settings
+  file's `bypassPermissions` works headlessly but gates the interactive TUI;
+  see Phase 5.1 / `wiki.md`.)
+- **Live-verified by the user (2026-09-20):** auto mode launches with no
+  prompts, the red glow reads well, and the graceful **Stop routine works** both
+  mid-task and while Claude is asking a question (Esc → wrap-up prompt → commit/
+  push → exit). Logic-level pieces are unit-tested (47 total).
 
 Phase 5.1 (attention affordances, from live feedback) — done:
 - Fixed from the first live test: auto mode now uses
@@ -148,7 +152,14 @@ Phase 5.1 (attention affordances, from live feedback) — done:
   steady; Reduce-Motion aware) as an ambient reminder that outlives banner
   dismissal. One `Color.attentionRed` used nowhere else. A UX-specialist pass
   designed both first.
-- Needs a live look (banner copy/placement, glow intensity).
+- **Live-verified (2026-09-20):** the red glow is "perfect"; banner + Stop
+  confirmed working, including multiple simultaneous awaiting sessions.
+
+Two mid-flight Stop bugs found and fixed during live testing (see `wiki.md`):
+Claude's TUI interrupts on **Esc** (not Ctrl-C) and submits on **`\r`** (not
+`\n`), and — because of its **paste detection** — the Enter must be sent as a
+**separate keystroke** after the prompt, or a long prompt is typed but never
+submitted.
 
 Still deferred (not Phase 5 scope):
 - The one-shot working→awaiting entry *pulse* animation — left to tune during
