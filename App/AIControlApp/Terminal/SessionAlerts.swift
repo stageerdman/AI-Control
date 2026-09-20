@@ -13,6 +13,24 @@ final class SessionAlerts: NSObject, ObservableObject {
     /// dashboard observes this and opens the project, then clears it.
     @Published var pendingOpenURL: URL?
 
+    /// Projects that should currently show an in-app attention banner / glow:
+    /// awaiting input, not dismissed for this episode, and not the one the user
+    /// is already viewing. Newest-awaiting first. Drives the red banner + glow.
+    @Published private(set) var attentionURLs: [URL] = []
+
+    /// Display names for the attention URLs, resolved at compute time (the view
+    /// only has URLs; names live in the dashboard model).
+    private(set) var names: [URL: String] = [:]
+
+    /// Per-episode dismissals: an X'd project stays out of the banner until it
+    /// next re-enters awaiting.
+    private var dismissed: Set<URL> = []
+
+    // Last inputs, kept so `dismiss(_:)` can recompute without new data.
+    private var lastAwaiting: Set<URL> = []
+    private var lastForeground: URL?
+    private var lastAppActive = false
+
     private var previousAwaiting: Set<URL> = []
     private var authorized = false
     private let center = UNUserNotificationCenter.current()
@@ -53,15 +71,52 @@ final class SessionAlerts: NSObject, ObservableObject {
             if !viewingThis { postNotification(for: url, name: name(url)) }
         }
 
-        // Left awaiting (replied, resumed, or closed) → withdraw its notification.
+        // Left awaiting (replied, resumed, or closed) → withdraw its notification
+        // and clear any dismissal so a fresh awaiting episode banners again.
         let noLonger = previousAwaiting.subtracting(awaiting)
         if !noLonger.isEmpty {
             let ids = noLonger.map(\.absoluteString)
             center.removeDeliveredNotifications(withIdentifiers: ids)
             center.removePendingNotificationRequests(withIdentifiers: ids)
+            dismissed.subtract(noLonger)
         }
 
         previousAwaiting = awaiting
+        lastAwaiting = awaiting
+        lastForeground = foreground
+        lastAppActive = appActive
+        recomputeAttention(name: name)
+    }
+
+    /// Dismisses the banner for one project (won't banner again until it
+    /// re-enters awaiting). The row **glow** is driven separately (by the raw
+    /// awaiting set), so it persists — banner = dismissible interrupt, glow =
+    /// ambient reminder (UX pass).
+    func dismiss(_ url: URL) {
+        dismissed.insert(url)
+        recomputeAttention(name: { names[$0] ?? "Project" })
+    }
+
+    /// The consolidated banner's X: dismisses every currently-shown project, so
+    /// the banner disappears until any of them next re-enters awaiting.
+    func dismissAll() {
+        dismissed.formUnion(attentionURLs)
+        recomputeAttention(name: { names[$0] ?? "Project" })
+    }
+
+    private func recomputeAttention(name: (URL) -> String) {
+        let hiddenForeground: Set<URL> = lastAppActive && lastForeground != nil ? [lastForeground!] : []
+        let visible = lastAwaiting.subtracting(dismissed).subtracting(hiddenForeground)
+
+        // Newest-awaiting first: stable order derived from awaiting membership
+        // isn't time-stamped here, so sort by name as a deterministic tiebreak;
+        // the store already surfaces most-recent via the pinned ordering.
+        let sorted = visible.sorted { name($0).localizedCaseInsensitiveCompare(name($1)) == .orderedAscending }
+
+        var resolvedNames: [URL: String] = [:]
+        for url in lastAwaiting { resolvedNames[url] = name(url) }
+        names = resolvedNames
+        attentionURLs = sorted
     }
 
     private func postNotification(for url: URL, name: String) {

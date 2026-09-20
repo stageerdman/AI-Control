@@ -17,6 +17,9 @@ struct DashboardRowView: View {
     var isAwaitingInput: Bool = false
 
     @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var haloOpacity: Double = 0
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -99,6 +102,35 @@ struct DashboardRowView: View {
                 .stroke(isCursor ? Color.accentColor : Color.clear, lineWidth: 1.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 4))
+        // Red attention glow — a soft blurred rim just *outside* the row (drawn
+        // after the clip so it can bleed past the edge). Distinct visual
+        // register from the flat selection tint and the crisp accent cursor
+        // ring, so they never collide (Phase 5.1 UX pass). Governed by the raw
+        // awaiting state, not banner dismissal, so it persists as the ambient
+        // reminder.
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.attentionRed, lineWidth: 2)
+                .blur(radius: 3)
+                .opacity(isAwaitingInput ? haloOpacity : 0)
+                .padding(-1)
+                .allowsHitTesting(false)
+        )
+        .onChange(of: isAwaitingInput) { _, awaiting in updateHalo(awaiting) }
+        .onAppear { if isAwaitingInput { haloOpacity = steadyHalo } }
+    }
+
+    /// Steady glow strength once settled — a touch dimmer in dark mode.
+    private var steadyHalo: Double { colorScheme == .dark ? 0.32 : 0.40 }
+
+    /// One entry swell (0.40→0.80→0.40) on becoming awaiting, then hold steady —
+    /// not a continuous throb (the banner owns the "loud" channel). Reduce Motion
+    /// skips the swell.
+    private func updateHalo(_ awaiting: Bool) {
+        guard awaiting else { haloOpacity = 0; return }
+        if reduceMotion { haloOpacity = steadyHalo; return }
+        withAnimation(.easeOut(duration: 0.25)) { haloOpacity = 0.80 }
+        withAnimation(.easeIn(duration: 0.30).delay(0.25)) { haloOpacity = steadyHalo }
     }
 
     /// Soft accent tint when the window is key, an even quieter gray

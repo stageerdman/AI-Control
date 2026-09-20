@@ -9,6 +9,7 @@ struct DashboardView: View {
     @State private var isChoosingFolder = false
     @State private var openProject: OpenProject?
     @State private var lastTap: (id: URL, at: Date)?
+    @State private var scrollTarget: URL?
     @FocusState private var listIsFocused: Bool
     @Environment(\.scenePhase) private var scenePhase
 
@@ -28,13 +29,26 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        Group {
-            if let open = openProject {
-                ProjectView(node: open.node, session: open.session) { openProject = nil }
-            } else {
-                dashboard
+        VStack(spacing: 0) {
+            if !alerts.attentionURLs.isEmpty {
+                AttentionBannerView(
+                    count: alerts.attentionURLs.count,
+                    primaryName: alerts.names[alerts.attentionURLs[0]] ?? "A project",
+                    onPrimary: handleBannerPrimary,
+                    onDismiss: alerts.dismissAll
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            Group {
+                if let open = openProject {
+                    ProjectView(node: open.node, session: open.session) { openProject = nil }
+                } else {
+                    dashboard
+                }
             }
         }
+        .animation(.easeOut(duration: 0.2), value: alerts.attentionURLs)
         // Session/alert state is synced here — on the always-present container,
         // not inside `dashboard` — so notifications and the Dock badge keep
         // updating while the user is inside a project view too.
@@ -104,6 +118,7 @@ struct DashboardView: View {
     }
 
     private var rowList: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(spacing: 2) {
                 ForEach(Array(viewModel.rows.enumerated()), id: \.element.id) { index, row in
@@ -153,6 +168,12 @@ struct DashboardView: View {
         .onKeyPress(.rightArrow) { viewModel.expandCursor(); return .handled }
         .onKeyPress(.return) { viewModel.activateCursor(); return .handled }
         .onKeyPress(.escape) { viewModel.clearSelection(); return .handled }
+        .onChange(of: scrollTarget) { _, target in
+            guard let target else { return }
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(target, anchor: .top) }
+            scrollTarget = nil
+        }
+        }
     }
 
     private func isExpandedOrganizer(_ row: DashboardRow) -> Bool {
@@ -196,6 +217,23 @@ struct DashboardView: View {
         guard let node = viewModel.node(for: url), node.kind == .project else { return }
         viewModel.selectedID = url
         openProject = OpenProject(node: node, session: sessionStore.session(for: url))
+    }
+
+    /// The red banner's primary action. One project waiting → open it. Several →
+    /// leave any project view and land on the dashboard at the top awaiting row,
+    /// where every awaiting row glows so the user picks the specific one.
+    private func handleBannerPrimary() {
+        let urls = alerts.attentionURLs
+        if urls.count == 1, let url = urls.first {
+            openProjectByURL(url)
+        } else {
+            openProject = nil
+            if let topAwaiting = viewModel.rows.first(where: { sessionStore.awaitingInputURLs.contains($0.id) }) {
+                viewModel.selectedID = topAwaiting.id
+                viewModel.cursorID = topAwaiting.id
+                scrollTarget = topAwaiting.id
+            }
+        }
     }
 
     /// Pushes the current awaiting/foreground/active state into `SessionAlerts`,
