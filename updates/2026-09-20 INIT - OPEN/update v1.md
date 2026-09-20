@@ -34,7 +34,7 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**Phase 0, Phase 1, Phase 2, Phase 3, and Phase 4: done.**
+**Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5: done.**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
@@ -105,20 +105,40 @@ Phase 4 (Terminal embedding) — done:
 - Build needs two flags/steps: `-skipPackagePluginValidation` and a
   user-installed Metal toolchain (agent's shell can't download it).
 
-Phase 5 (Session management) — partially delivered early via live feedback:
-- DONE: auto-launch `claude` on session open (configurable
-  `TerminalSession.autoLaunchCommand`); running sessions pinned on top with
-  a green indicator (§8.1); right-click a project for Open/Close Session
-  (`TerminalSessionStore.runningURLs` + `stopSession`, `TerminalSession.stop`
-  + `onTerminated`).
-- Also fixed from feedback: the single-click lag (removed the count:2 tap
-  gesture; double-click now detected by timing) and the sidebar's per-click
-  `git` call (GitHub info now comes from `.project`; the tested GitStatus
-  reader stays for the project view).
-- STILL TODO for Phase 5: awaiting-input detection (via the `recentOutput`
-  tee or Claude Code hooks) + its badge/notification, the Stop *routine*
-  (graceful "wrap up and save" prompt vs. the hard Close), Dock badge, and
-  the auto-permission flag for `claude` (§11).
+Phase 5 (Session management) — done:
+- Delivered early via live feedback (kept): auto-launch `claude` on session
+  open; running sessions pinned on top with a green indicator (§8.1);
+  right-click a project to act on a running session. Also fixed then: the
+  single-click lag (double-click detected by timing) and the sidebar's
+  per-click `git` call (GitHub info from `.project`).
+- **Awaiting-input detection via Claude Code hooks** (the §11 architecture
+  decision — hooks, not output-parsing). Research-first per principle 3: an
+  isolated `phase5-experiment/` proved that an app-owned `--settings` file can
+  register `Stop`/`UserPromptSubmit`/… hooks that write per-project status
+  files, and that `bypassPermissions` works from that same file
+  (`phase5-research.md`). `SessionHooks` (App) ships the hook + writes per-
+  project settings; `StatusDirectoryWatcher` watches the status dir;
+  `SessionStatusParser` + `SessionActivity` (AIControlCore, 7 tests) turn the
+  files into typed state. `TerminalSessionStore` publishes `awaitingInputURLs`.
+- **Dashboard surfacing** (§8.1): awaiting rows show an accent
+  `arrowshape.right.fill` ("your turn") vs. the calm green running dot, in the
+  same reserved 16pt slot; awaiting sessions sort above working ones in the
+  pinned group. A UX-specialist pass designed it first.
+- **Notification + Dock badge** (§11): `SessionAlerts` fires one `.active`
+  notification per working→awaiting transition (withdrawn on leaving,
+  suppressed when you're viewing that project) and sets the Dock badge to the
+  awaiting count. Clicking a notification opens the project.
+- **Stop routine** (§7/§9.7): right-click **Stop** interrupts, sends the
+  wrap-up prompt, waits for the `Stop` hook, then `/exit`s and closes;
+  **Force Close** keeps the immediate kill. 300s timeout backstop.
+- **Auto-permission** (§11): Claude launches under `bypassPermissions` from
+  the app-owned settings file — no approval ceremony (§4).
+- Requires a **live build test** by the user (see below); logic-level pieces
+  are unit-tested (47 total) and the app builds.
+
+Still deferred (not Phase 5 scope):
+- The one-shot working→awaiting entry *pulse* animation — left to tune during
+  live testing (the static arrow + reorder already ship).
+- Editable routine prompts (the Stop prompt) → Settings window, §8.6 / Phase 9.
 - Deferred project-view work (§8.3): side panel with recent updates,
-  how-to-use/status, `issues.txt`, and the New-Update button. `issues.txt`
-  belongs here, not the single-click sidebar.
+  how-to-use/status, `issues.txt`, and the New-Update button.

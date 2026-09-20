@@ -285,3 +285,70 @@ them):
    non-interactive shell it hangs at 0 bytes forever. **How to apply:** treat
    any `downloadComponent` / SDK-component install as a user step; ask the user
    to run it rather than burning time waiting on a stalled agent-side download.
+
+## Session state = Claude Code hooks writing status files, not output parsing
+
+The §11 open question ("detect awaiting-input via terminal output or hooks")
+was decided in Phase 5 in favour of **hooks**, after an isolated experiment
+(`phase5-experiment/`, `phase5-research.md`) proved it works end-to-end.
+
+- **One app-owned `--settings` file per project does everything.** It's passed
+  as `claude --settings <file>` and carries both `permissions.defaultMode:
+  bypassPermissions` (auto mode, §4 — no CLI flag needed) **and** the hooks.
+  We never touch the user's `~/.claude/settings.json`. The doc's warning that
+  `bypassPermissions` is refused from a project `.claude/settings.json` does
+  **not** apply to a file given via `--settings` — that path honours it.
+- **`Stop` = awaiting-input; `UserPromptSubmit`/`SessionStart` = working;
+  `SessionEnd` = stopped.** The mapping lives in the tested `SessionActivity`
+  (AIControlCore), not the shell hook — same "pure parser owns interpretation"
+  line as `GitStatusParser`. `SessionStatusParser` decodes the status-file JSON;
+  `TerminalSessionStore` is the thin watcher.
+- **The hook takes args, not stdin — so no `jq`/`python` dependency.** We
+  generate a per-project settings file whose hook command is
+  `"<script>" <Event> "<statusfile>" "<cwd>"`, so the shipped `status-hook.sh`
+  is a trivial `printf`-and-`mv` with nothing to parse. This also dodges any
+  future change to the hook stdin schema.
+- **Two gotchas that will bite again (both in `phase5-research.md`):**
+  (a) the hook `command` must be **double-quoted** because it runs via
+  `/bin/sh` and Application Support has a space; (b) Claude Code reports a
+  **symlink-resolved `cwd`** (`/tmp` → `/private/tmp`), so match project paths
+  with `resolvingSymlinksInPath`, never raw strings. `SessionHooks.key(for:)`
+  keys everything off the resolved path.
+- **Directory watching:** a `DispatchSource` on the status dir's fd is enough —
+  the hook's atomic temp-write + `mv` mutates the directory entry and triggers
+  `.write`. Clear stale status files on launch so a prior run can't re-mark a
+  dead session.
+
+## Awaiting-input UX: shape carries meaning, alerts stay quiet
+
+- **Accent arrow vs. green dot, not a second dot colour.** Awaiting shows
+  `arrowshape.right.fill` in the app's single accent; working stays a calm green
+  circle. Differing on shape + hue + silhouette is colourblind-safe and reuses
+  the one sanctioned accent instead of adding an alarm colour. Both live in the
+  same reserved 16pt slot → no reflow. (Phase 5 UX pass.)
+- **The top of the list is the to-do queue:** awaiting sessions sort above
+  working ones within the pinned running group — one group, no second divider.
+- **Alerts must be wired on the always-present container, not inside the
+  dashboard view.** `body` swaps between the dashboard and the full-window
+  project view; putting the store/alert `onChange` handlers on the swapped-out
+  `dashboard` subview would stop notifications/Dock-badge updates the moment you
+  entered a project. They live on the outer `Group` so they run in both.
+- **Notification hygiene:** identifier = project URL (so working↔awaiting
+  toggling replaces rather than stacks, and we can withdraw on leaving);
+  `.active` level (informative, not an alarm); suppressed only when the app is
+  frontmost **and** you're viewing that exact project.
+
+## The Stop routine rides the same hook stream
+
+The graceful Stop (§7/§9.7) reuses the status files rather than scraping output:
+interrupt (Ctrl-C) → send the wrap-up prompt → **wait to observe `working` and
+then `awaitingInput`** (the `Stop` hook) → `/exit` → terminate. Requiring the
+`working` sighting first is essential: a session sitting idle is already
+`awaitingInput`, so without that guard the routine would exit before Claude did
+any wrapping up. A 300s timeout force-closes so a Stop can never hang forever.
+
+**Gotcha:** the auto-launch runs `claude` *inside* a login shell, so `/exit`
+only quits Claude — the shell (and thus the session process) is still alive. The
+routine therefore `/exit`s Claude for a clean shutdown and **then** terminates
+the shell, so the row actually unpins. `TerminalSession.onTerminated` alone
+wouldn't fire on `/exit`.
