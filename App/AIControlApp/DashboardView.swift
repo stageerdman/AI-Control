@@ -31,10 +31,20 @@ struct DashboardView: View {
             } else if viewModel.rows.isEmpty {
                 EmptyStateView(systemImage: "magnifyingglass", title: "No matches")
             } else {
-                rowList
+                HSplitView {
+                    rowList
+                        .frame(minWidth: 280, idealWidth: 420)
+                        .layoutPriority(1)
+                    ProjectSidebarView(
+                        node: viewModel.selectedNode,
+                        gitStatus: viewModel.selectedGitStatus,
+                        onBringUnderControl: bringUnderControl
+                    )
+                    .frame(minWidth: 260, idealWidth: 320, maxWidth: 460)
+                }
             }
         }
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(minWidth: 760, minHeight: 360)
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "Search")
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
@@ -86,6 +96,13 @@ struct DashboardView: View {
 
     private func isExpandedOrganizer(_ row: DashboardRow) -> Bool {
         rootFolderStore.expandedIDs.contains(row.id)
+    }
+
+    /// Interim behavior for the untouched-folder action until the AI-window
+    /// adoption flow (Phase 9.3) exists: reveal the folder in Finder so the
+    /// button does something real and non-misleading (its caption says so).
+    private func bringUnderControl(_ node: AIControlNode) {
+        NSWorkspace.shared.activateFileViewerSelecting([node.url])
     }
 }
 
