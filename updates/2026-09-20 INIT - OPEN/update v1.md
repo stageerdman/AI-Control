@@ -34,7 +34,7 @@ project. Full spec: `PROJECT.md`. Original brief: `idea.md`.
 
 ## Status
 
-**Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5: done.**
+**Phases 0–5.1 and Phase 6: done.**
 
 Done:
 - Repo initialized, pushed to `https://github.com/stageerdman/AI-Control`
@@ -160,6 +160,46 @@ Claude's TUI interrupts on **Esc** (not Ctrl-C) and submits on **`\r`** (not
 `\n`), and — because of its **paste detection** — the Enter must be sent as a
 **separate keystroke** after the prompt, or a long prompt is typed but never
 submitted.
+
+Phase 6 (Global config) — done:
+- No isolated research experiment this time: it's file-model work like the
+  existing scanning/git code, not a new external API (principle 3 applies to
+  new APIs). A UX-specialist pass ran first for the two UI surfaces
+  (`ux-notes-global-config.md`).
+- **Core (`AIControlCore`, testable):** `GlobalConfig` model,
+  `GlobalConfigLocator` (`~/.ai-control/`, `AI_CONTROL_HOME` override for
+  tests), `GlobalConfigReader` (modules with mtimes, wiki pages with parsed
+  usage descriptions, prompts, `.env` **key names only**), and a pure
+  `ClaudeMdDriftDetector` (§6.3). +16 tests, **63 total pass**.
+- **Prompt store + bootstrap (App):** `GlobalConfigStore` reads the repo and
+  resolves routine-prompt text (stored file → built-in default);
+  `RoutinePromptKind` holds the six §8.6 prompts. The hardcoded Stop prompt now
+  flows through the store. First-launch **skeleton bootstrap** creates the
+  dirs, seeds the default prompts, an empty `.env`, the wiki `search.sh`, a
+  README, and runs `git init` — **module content stays AI-authored** (§7).
+- **CLAUDE.md drift + Rebuild (App, §6.3/§8.2):** the sidebar's old "not
+  available yet" Maintenance placeholder is now a real drift row (needs-config
+  / needs-modules / not-generated / up-to-date / out-of-date + changed-module
+  chips + **Rebuild**), driven by the detector. Rebuild sends the stored prompt
+  into the **project's own session** (never the app editing files, §2), with
+  honest async "Rebuilding…" feedback and self-heal from Claude's `.project`
+  rewrite (re-read on activate / on rebuild finish). No status colour —
+  `attentionRed` stays awaiting-input only.
+- **Bootstrap strip:** a neutral (not red) "Create global config" strip on the
+  dashboard while `~/.ai-control/` is absent; disappears once the skeleton
+  exists. Builds; awaiting live verification.
+
+Deferred from Phase 6 (by design):
+- **Secret sync** row is still an honest placeholder — it shares this exact
+  state machine but lands in Phase 8 (needs global-`.env`-vs-project diffing).
+- **Settings-window** global-config status + prompt editing (§8.6) → Phase 9
+  when that window exists; the dashboard strip covers the first-launch case now.
+- **AI-authored module content** on first launch (§9.1 step 2) rides on the
+  dashboard AI window (§8.4), not yet built; the skeleton + honest
+  "needs global modules" states bridge until then.
+- **Live-watching** module edits is currently a re-read on app-activate +
+  post-rebuild rather than a recursive FSEvents watcher — enough for the flow,
+  revisit if it feels stale in use.
 
 Still deferred (not Phase 5 scope):
 - The one-shot working→awaiting entry *pulse* animation — left to tune during

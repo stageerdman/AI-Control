@@ -385,3 +385,65 @@ lands as a real Enter. **How to apply:** any future programmatic input to Claude
 (rebuild/sync/new-update prompts, §8.6) must type-then-Enter-separately (use
 `sendLine`); interrupts use Esc; give an Esc ~0.9s to settle before typing so
 keystrokes aren't dropped mid-interrupt.
+
+## Phase 6 — Global config: drift is a pure function, the app never authors content
+
+**Drift lives in `AIControlCore` as a pure comparison, the app only renders it.**
+`ClaudeMdDriftDetector.evaluate(generatedStamp:recordedModules:moduleModifiedDates:)`
+returns `.notGenerated / .upToDate / .outOfDate(changed:removed:)` and is fully
+unit-tested. The App composes the two *global-existence* gates on top
+(`needs global config` when `~/.ai-control/` is absent, `needs global modules`
+when it exists but is empty) because those are global-repo state, not
+per-project drift — keeping the detector focused on the date-vs-mtime question.
+
+**Date-only generation stamps are treated as end-of-day.** `.project`'s
+`claude_md_generated` is usually a bare date (`2026-09-20`). Comparing it against
+full module mtimes is ambiguous, so a date-only stamp parses to **23:59:59 local**
+that day: a module touched *earlier the same day it was generated* doesn't
+falsely read as drift, while a change the next day does. A full ISO datetime, if
+present, is used exactly (so same-day post-generation edits are catchable when
+precision exists). This avoids the annoying "just generated, already out of
+date" false positive.
+
+**The app scaffolds the config *skeleton*, but never authors module content.**
+Principle 2/7 ("the AI does the work", "no templates") is about *project* files
+and *knowledge* content — it does **not** forbid the app from laying down its
+own config repo's empty structure. So `createSkeleton()` creates `modules/`,
+`wiki/`, `prompts/` (seeded with the editable routine prompts), an empty `.env`,
+`search.sh`, a README, and `git init` — but leaves `modules/` empty. The honest
+middle state is "skeleton created · no modules authored yet"; module authoring
+waits for the AI window. Seeding *prompts* is fine (they're explicitly editable
+routine prompts, §8.6, not templates); authoring *modules* is not.
+
+**Routine prompts: file-first with a built-in default fallback.**
+`RoutinePromptKind` carries each §8.6 prompt's stable key (`stop`,
+`rebuild-claude-md`, …) and default text. `GlobalConfigStore.promptText(for:)`
+returns the on-disk `prompts/<key>.md` if present, else the default — so behavior
+is identical whether or not the repo exists, and the previously-hardcoded Stop
+prompt now flows through the same seam. Settings-window editing (Phase 9) just
+writes those files.
+
+**Rebuild reuses the Stop routine's activity-tracking shape and self-heals from
+disk.** Rebuild sends the stored prompt into the *project's own* session (not
+the dashboard AI window — a project has its own session) via the paste-safe
+`sendLine`. The store marks `rebuildingURLs`, waits to see `working` then
+`awaitingInput` (same `sawWorking` guard as Stop, so a pre-existing idle state
+doesn't clear it early), then clears the flag. The row does **not** optimistically
+flip to "Up to date" — that would fake a status. Instead the app re-reads the
+config + rescans on rebuild-finish and on app-activate, and the drift row
+recomputes from Claude's rewritten `claude_md_generated`. Disk is the truth.
+
+**Actor isolation: don't `@MainActor` a store that a nonisolated store must read
+synchronously.** `GlobalConfigStore` was first `@MainActor`; `TerminalSessionStore`
+(nonisolated) calling `promptText(for:)` from its main-thread callbacks failed to
+compile (`call to main actor-isolated instance method in a synchronous nonisolated
+context`). Fix: drop `@MainActor` from `GlobalConfigStore` — all its mutations
+already happen on the main thread via the view, so `@Published` publishes stay
+safe, and the session store can read prompt text synchronously. Lesson: reserve
+`@MainActor` for types only ever touched from main-isolated code; a shared
+read-model consumed by nonisolated collaborators shouldn't carry it.
+
+**`.env` parsing reads key *names* only.** The reader splits on the first `=`,
+strips an optional `export `, skips comments/blanks, dedupes, and keeps only the
+left-hand key. Values are never stored on the model (§6.5) — a test asserts the
+secret value never appears in `secretNames`.
