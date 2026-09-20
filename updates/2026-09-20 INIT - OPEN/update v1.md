@@ -105,12 +105,20 @@ Phase 4 (Terminal embedding) — done:
 - Build needs two flags/steps: `-skipPackagePluginValidation` and a
   user-installed Metal toolchain (agent's shell can't download it).
 
-Next (Phase 5 — Session management):
-- Pin running sessions on top, awaiting-input detection (via the
-  `dataReceived` tee or Claude Code hooks), Stop routine, notifications,
-  Dock badge. The `recentOutput` tee and `TerminalSession.isRunning`/
-  `exitCode` are the hooks already in place for this.
-- Deferred from Phase 4: auto-launching `claude` (vs a plain shell), and the
-  project-view side panel (recent updates, how-to-use/status, `issues.txt`
-  per §8.3, New-Update button). `issues.txt` display belongs to this
-  project view, not the single-click sidebar.
+Phase 5 (Session management) — partially delivered early via live feedback:
+- DONE: auto-launch `claude` on session open (configurable
+  `TerminalSession.autoLaunchCommand`); running sessions pinned on top with
+  a green indicator (§8.1); right-click a project for Open/Close Session
+  (`TerminalSessionStore.runningURLs` + `stopSession`, `TerminalSession.stop`
+  + `onTerminated`).
+- Also fixed from feedback: the single-click lag (removed the count:2 tap
+  gesture; double-click now detected by timing) and the sidebar's per-click
+  `git` call (GitHub info now comes from `.project`; the tested GitStatus
+  reader stays for the project view).
+- STILL TODO for Phase 5: awaiting-input detection (via the `recentOutput`
+  tee or Claude Code hooks) + its badge/notification, the Stop *routine*
+  (graceful "wrap up and save" prompt vs. the hard Close), Dock badge, and
+  the auto-permission flag for `claude` (§11).
+- Deferred project-view work (§8.3): side panel with recent updates,
+  how-to-use/status, `issues.txt`, and the New-Update button. `issues.txt`
+  belongs here, not the single-click sidebar.
