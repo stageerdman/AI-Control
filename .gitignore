@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Xcode / xcodegen
+App/*.xcodeproj/
+App/.build/
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
