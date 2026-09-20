@@ -28,22 +28,39 @@ final class TerminalSessionStore: ObservableObject {
     private let hooks = SessionHooks()
     private var watcher: StatusDirectoryWatcher?
 
+    /// Source of the editable routine prompts (`~/.ai-control/prompts/`). Set by
+    /// the view after construction. Prompts fall back to their built-in defaults
+    /// when this is absent or the repo isn't set up, so behavior is unchanged
+    /// before the global config exists.
+    weak var globalConfig: GlobalConfigStore?
+
     /// In-flight graceful Stop routines, keyed by project URL. See
     /// `runStopRoutine(for:)`.
     private var stopping: [URL: StopState] = [:]
 
+    /// Projects with a Rebuild-CLAUDE.md prompt in flight, surfaced by the
+    /// sidebar as a "Rebuilding…" line (PROJECT.md §6.3). Cleared once Claude
+    /// finishes (working→awaiting) so the `.project` re-read can self-heal drift.
+    @Published private(set) var rebuildingURLs: Set<URL> = []
+    private var rebuilding: [URL: RebuildState] = [:]
+
     /// The prompt sent to Claude Code during the graceful Stop routine
-    /// (PROJECT.md §7/§9.7). Hardcoded for now; the Settings window (§8.6,
-    /// Phase 9) will make it editable — same seam as `autoLaunchCommand`.
-    var stopRoutinePrompt =
-        "Please wrap up now: bring the current task to a safe stopping point, " +
-        "save any state and notes so we can continue later, update the relevant " +
-        "tracking files, then commit and push everything. We'll come back to this."
+    /// (PROJECT.md §7/§9.7), resolved from the global prompt store with a
+    /// built-in default fallback.
+    private var stopRoutinePrompt: String {
+        globalConfig?.promptText(for: .stop) ?? RoutinePromptKind.stop.defaultText
+    }
 
     /// Tracks one graceful stop: whether we've seen Claude start working on the
     /// wrap-up prompt yet (so a pre-existing idle state doesn't trigger an early
     /// exit).
     private struct StopState {
+        var sawWorking = false
+    }
+
+    /// Tracks one in-flight Rebuild: whether Claude has started working on the
+    /// prompt yet, so a pre-existing idle state doesn't clear it immediately.
+    private struct RebuildState {
         var sawWorking = false
     }
 
@@ -142,6 +159,47 @@ final class TerminalSessionStore: ObservableObject {
         }
     }
 
+    // MARK: - Rebuild CLAUDE.md (PROJECT.md §6.3)
+
+    /// Sends the Rebuild-CLAUDE.md routine prompt into the project's own session,
+    /// starting one if needed. The app never edits CLAUDE.md itself — the AI does
+    /// (principle 2). Marks the project as rebuilding for the sidebar until Claude
+    /// finishes; the resulting `.project` rewrite is what actually clears drift.
+    /// `appendix` carries any extra context to include after the base prompt.
+    func rebuildClaudeMd(for url: URL, appendix: String = "") {
+        let session = session(for: url) // starts one if absent (same path as open)
+        rebuilding[url] = RebuildState()
+        rebuildingURLs.insert(url)
+
+        let base = globalConfig?.promptText(for: .rebuildClaudeMd) ?? RoutinePromptKind.rebuildClaudeMd.defaultText
+        let prompt = appendix.isEmpty ? base : base + "\n\n" + appendix
+        // Small delay so a freshly-launched session's `claude` is ready at its
+        // input line before we type (mirrors the Stop routine's settle beat).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+            guard let self, self.rebuilding[url] != nil else { return }
+            session.sendLine(prompt)
+        }
+    }
+
+    /// Whether a Rebuild prompt is currently in flight for `url`.
+    func isRebuilding(_ url: URL) -> Bool { rebuilding[url] != nil }
+
+    /// Advances an in-flight Rebuild: once Claude has picked up the prompt
+    /// (`working`) and then returns to `awaitingInput`, it's done — clear the
+    /// flag so the drift row can self-heal from the rewritten `.project`.
+    private func advanceRebuild(_ url: URL, activity: SessionActivity) {
+        guard var state = rebuilding[url] else { return }
+        switch activity {
+        case .working:
+            if !state.sawWorking { state.sawWorking = true; rebuilding[url] = state }
+        case .awaitingInput where state.sawWorking, .stopped:
+            rebuilding[url] = nil
+            rebuildingURLs.remove(url)
+        default:
+            break
+        }
+    }
+
     // MARK: - Status watching
 
     /// Re-reads every tracked project's status file and republishes activity.
@@ -151,6 +209,7 @@ final class TerminalSessionStore: ObservableObject {
             guard let status = SessionStatusParser.parse(contentsOf: hooks.statusFileURL(for: url)) else { continue }
             activityByURL[url] = status.activity
             advanceStopRoutine(url, activity: status.activity)
+            advanceRebuild(url, activity: status.activity)
         }
         recomputeAwaitingInput()
     }
@@ -170,6 +229,8 @@ final class TerminalSessionStore: ObservableObject {
         sessions[url] = nil
         activityByURL[url] = nil
         stopping[url] = nil
+        rebuilding[url] = nil
+        rebuildingURLs.remove(url)
         keyToURL[hooks.key(for: url)] = nil
         runningURLs.remove(url)
         hooks.removeStatus(for: url)

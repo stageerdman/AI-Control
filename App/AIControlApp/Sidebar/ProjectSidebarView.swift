@@ -9,12 +9,20 @@ import AIControlCore
 /// placeholder, never a faked status.
 struct ProjectSidebarView: View {
     let node: AIControlNode?
+    /// The global-config snapshot, for CLAUDE.md drift (PROJECT.md §6.3).
+    let globalConfig: GlobalConfig
+    /// Whether the selected project has a Rebuild prompt in flight.
+    let isRebuilding: Bool
     /// Interim actions for the two AI-driven flows until the AI window
     /// (Phase 4+) exists: adopting an untouched folder (Phase 9.3) and fixing
     /// an invalid nested organizer. Both hand a folder + a predefined prompt
     /// to the AI later; for now they reveal the folder in Finder.
     let onBringUnderControl: (AIControlNode) -> Void
     let onLetAIFix: (AIControlNode) -> Void
+    /// Sends the Rebuild-CLAUDE.md prompt to the project's session.
+    let onRebuild: (AIControlNode) -> Void
+    /// Opens the project's terminal session (to watch a rebuild).
+    let onOpenSession: (AIControlNode) -> Void
 
     var body: some View {
         Group {
@@ -22,7 +30,13 @@ struct ProjectSidebarView: View {
             case .none:
                 SidebarEmptyState()
             case .project:
-                ProjectDetail(node: node!)
+                ProjectDetail(
+                    node: node!,
+                    globalConfig: globalConfig,
+                    isRebuilding: isRebuilding,
+                    onRebuild: onRebuild,
+                    onOpenSession: onOpenSession
+                )
             case .organizer:
                 OrganizerDetail(node: node!)
             case .untouched:
@@ -60,6 +74,10 @@ private struct SidebarScaffold<Content: View>: View {
 
 private struct ProjectDetail: View {
     let node: AIControlNode
+    let globalConfig: GlobalConfig
+    let isRebuilding: Bool
+    let onRebuild: (AIControlNode) -> Void
+    let onOpenSession: (AIControlNode) -> Void
 
     private var file: ProjectFile { node.projectFile ?? ProjectFile() }
 
@@ -103,7 +121,7 @@ private struct ProjectDetail: View {
             if file.secrets.isEmpty {
                 Text("None").font(.caption).foregroundStyle(.tertiary)
             } else {
-                SecretChips(names: file.secrets)
+                MonospaceChips(items: file.secrets)
             }
         }
     }
@@ -111,17 +129,22 @@ private struct ProjectDetail: View {
     @ViewBuilder
     private var maintenanceSection: some View {
         SidebarSection(title: "Maintenance") {
-            VStack(alignment: .leading, spacing: 4) {
-                // `claude_md_generated == null` is truthful today, so say so.
+            VStack(alignment: .leading, spacing: 8) {
+                ClaudeMdMaintenanceView(
+                    file: file,
+                    globalConfig: globalConfig,
+                    isRebuilding: isRebuilding,
+                    onRebuild: { onRebuild(node) },
+                    onOpenSession: { onOpenSession(node) }
+                )
+                // Secret sync shares this state machine (§6.5) but lands in
+                // Phase 8; keep it an honest placeholder that tracks config
+                // existence, parallel to the CLAUDE.md row.
                 SidebarKeyValue(
-                    key: "CLAUDE.md drift",
-                    value: file.claudeMdGenerated == nil ? "not generated yet" : "not available yet",
+                    key: "Secret sync",
+                    value: globalConfig.exists ? "not available yet" : "needs global config",
                     placeholder: true
                 )
-                SidebarKeyValue(key: "Secret sync", value: "not available yet", placeholder: true)
-                Text("Available once global config exists.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -144,24 +167,6 @@ private struct ProjectDetail: View {
         if let adopted = file.adopted {
             SidebarSection(title: "Details") {
                 SidebarKeyValue(key: "Adopted", value: adopted)
-            }
-        }
-    }
-}
-
-/// Wrapping, quiet monospaced tokens for secret names — names only, never values.
-private struct SecretChips: View {
-    let names: [String]
-
-    var body: some View {
-        FlowLayout(spacing: 6) {
-            ForEach(names, id: \.self) { name in
-                Text(name)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
             }
         }
     }

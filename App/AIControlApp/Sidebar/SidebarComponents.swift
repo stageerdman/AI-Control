@@ -97,6 +97,26 @@ struct SidebarKeyValue: View {
     }
 }
 
+/// Wrapping, quiet monospaced tokens — secret names, module names. Names only,
+/// never values. Calm gray chips; no status color (the surrounding copy carries
+/// meaning). Shared so secrets and changed-module lists read identically.
+struct MonospaceChips: View {
+    let items: [String]
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+            }
+        }
+    }
+}
+
 /// Minimal left-to-right wrapping layout, used for secret-name chips. Lays
 /// each subview at its ideal size and wraps to a new line when the current one
 /// would overflow the proposed width.

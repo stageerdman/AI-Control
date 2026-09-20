@@ -5,6 +5,7 @@ struct DashboardView: View {
     @StateObject private var rootFolderStore = RootFolderStore()
     @StateObject private var viewModel: DashboardViewModel
     @StateObject private var sessionStore = TerminalSessionStore()
+    @StateObject private var globalConfig = GlobalConfigStore()
     @StateObject private var alerts = SessionAlerts()
     @State private var isChoosingFolder = false
     @State private var openProject: OpenProject?
@@ -54,6 +55,7 @@ struct DashboardView: View {
         // updating while the user is inside a project view too.
         .onAppear {
             alerts.requestAuthorization()
+            sessionStore.globalConfig = globalConfig
             viewModel.setRunningURLs(sessionStore.runningURLs)
             viewModel.setAwaitingInputURLs(sessionStore.awaitingInputURLs)
             syncAlerts()
@@ -63,7 +65,21 @@ struct DashboardView: View {
             viewModel.setAwaitingInputURLs(newValue)
             syncAlerts()
         }
-        .onChange(of: scenePhase) { _, _ in syncAlerts() }
+        .onChange(of: scenePhase) { _, phase in
+            syncAlerts()
+            // Returning to the app re-reads the global config and rescans, so a
+            // module edit or a Rebuild's `.project` rewrite recomputes drift.
+            if phase == .active {
+                globalConfig.reload()
+                viewModel.rescan()
+            }
+        }
+        // When a Rebuild finishes (URL leaves the rebuilding set), re-read so the
+        // drift row self-heals from Claude's `.project` rewrite.
+        .onChange(of: sessionStore.rebuildingURLs) { _, _ in
+            globalConfig.reload()
+            viewModel.rescan()
+        }
         .onChange(of: openProject?.id) { _, _ in syncAlerts() }
         .onChange(of: alerts.pendingOpenURL) { _, url in
             guard let url else { return }
@@ -73,6 +89,15 @@ struct DashboardView: View {
     }
 
     private var dashboard: some View {
+        VStack(spacing: 0) {
+            if viewModel.hasRootFolder && !globalConfig.isSetUp {
+                GlobalConfigBanner(onCreate: createGlobalConfig)
+            }
+            dashboardBody
+        }
+    }
+
+    private var dashboardBody: some View {
         Group {
             if !viewModel.hasRootFolder {
                 EmptyStateView(
@@ -96,8 +121,12 @@ struct DashboardView: View {
                         .layoutPriority(1)
                     ProjectSidebarView(
                         node: viewModel.selectedNode,
+                        globalConfig: globalConfig.config,
+                        isRebuilding: viewModel.selectedNode.map { sessionStore.isRebuilding($0.url) } ?? false,
                         onBringUnderControl: revealInFinder,
-                        onLetAIFix: revealInFinder
+                        onLetAIFix: revealInFinder,
+                        onRebuild: rebuild,
+                        onOpenSession: openSessionForNode
                     )
                     .frame(minWidth: 260, idealWidth: 320, maxWidth: 460)
                 }
@@ -186,6 +215,26 @@ struct DashboardView: View {
     /// non-misleading (their captions say so).
     private func revealInFinder(_ node: AIControlNode) {
         NSWorkspace.shared.activateFileViewerSelecting([node.url])
+    }
+
+    /// Creates the global-config repo skeleton (PROJECT.md §6, §9.1) and reloads.
+    /// Best-effort: a filesystem failure just leaves the banner in place.
+    private func createGlobalConfig() {
+        try? globalConfig.createSkeleton()
+    }
+
+    /// Rebuild CLAUDE.md: sends the stored prompt into the project's own session
+    /// (starting one if needed). The AI regenerates the file; the app never
+    /// touches it (principle 2).
+    private func rebuild(_ node: AIControlNode) {
+        sessionStore.rebuildClaudeMd(for: node.url)
+    }
+
+    /// Opens the project's terminal session full-window (to watch a rebuild).
+    private func openSessionForNode(_ node: AIControlNode) {
+        guard node.kind == .project else { return }
+        viewModel.selectedID = node.url
+        openProject = OpenProject(node: node, session: sessionStore.session(for: node.url))
     }
 
     /// Handles a single click, detecting a double-click manually by timing.
