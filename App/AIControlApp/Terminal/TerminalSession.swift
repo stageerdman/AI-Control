@@ -82,12 +82,20 @@ final class TerminalSession: ObservableObject, LocalProcessTerminalViewDelegate 
         terminalView.send(txt: "\u{1b}") // ESC
     }
 
-    /// Sends a line of text and submits it. Uses a **carriage return** (`\r`),
-    /// not `\n`: Claude Code's TUI runs the PTY in raw mode and treats Enter as
-    /// CR, so a `\n` types the text but never submits it. `\r` also works for a
-    /// cooked-mode shell (the tty maps CR→NL), so it's correct everywhere.
+    /// Types `text`, then presses Enter as a **separate** keystroke shortly
+    /// after. Two reasons this can't be one `send(text + "\r")`:
+    /// 1. Enter in Claude's raw-mode TUI is a carriage return (`\r`), not `\n`.
+    /// 2. Claude's TUI does **paste detection** — a long string arriving in one
+    ///    burst is treated as a paste, and a `\r` at its tail is kept as a
+    ///    literal newline instead of submitting. Sending the `\r` on its own,
+    ///    after the paste window closes, makes it a real Enter keypress.
+    /// `\r` also submits in the cooked-mode shell (the tty maps CR→NL), so this
+    /// is correct for both the shell and the Claude TUI.
     func sendLine(_ text: String) {
-        send(text + "\r")
+        send(text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            self?.send("\r")
+        }
     }
 
     /// Asks the CLI to exit cleanly (`/exit`), used at the end of the Stop
