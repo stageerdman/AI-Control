@@ -189,6 +189,31 @@ Phase 6 (Global config) — done:
   dashboard while `~/.ai-control/` is absent; disappears once the skeleton
   exists. Builds; awaiting live verification.
 
+Phase 6.4 (Global Config control window, from live feedback) — done:
+- Live reaction: the "Create global config" strip created `~/.ai-control/`
+  **silently and vanished** → confusing; the user wanted a real place to see and
+  control the `.md` files/prompts ("a window like on the top bar… or at least let
+  me open the folder and edit"). Two UX-specialist passes ran first
+  (`ux-notes-config-window.md`, `ux-notes-config-content.md`).
+- **Stores lifted to app scope.** `AIControlApp` now owns
+  root/viewModel/session/globalConfig/alerts so a second scene shares them;
+  `DashboardView` receives them. Adds **Settings… ⌘,** + **Window → Global
+  Config** commands and a **gear toolbar button**.
+- **Global Config window** (`NavigationSplitView`): Overview / Modules / Wiki /
+  Prompts / Secrets / General — one window for all of `~/.ai-control/` (§8.5+§8.6
+  folded together). MVP = honest live **visibility** + **Reveal in Finder /
+  Open in editor** on every section (the reusable `ConfigFolderActions`);
+  Default/Edited prompt badges; **Create lives here** with in-place feedback; the
+  dashboard strip button is now **"Set up…"** and opens the window (fixes the
+  silent-vanish). No status colour. In-app text editing deferred.
+- **Option C chosen by the user** (AI interviews → drafts modules): new
+  `authorModules` prompt + `TerminalSessionStore.authorModules(at:)` runs a
+  root-scoped Claude session that interviews and writes UX/WORKFLOW/STRUCTURE/
+  CODING; shown in a `DraftModulesSheet`; reload on close self-heals status to
+  "Ready · n modules". App authors nothing (principles 2/7 intact — modules are
+  the *input* the AI writes, not a project template; see wiki).
+- Builds; 63 core tests unaffected. **Awaiting live verification.**
+
 Deferred from Phase 6 (by design):
 - **Secret sync** row is still an honest placeholder — it shares this exact
   state machine but lands in Phase 8 (needs global-`.env`-vs-project diffing).

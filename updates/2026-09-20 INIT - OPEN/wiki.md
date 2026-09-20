@@ -447,3 +447,57 @@ read-model consumed by nonisolated collaborators shouldn't carry it.
 strips an optional `export `, skips comments/blanks, dedupes, and keeps only the
 left-hand key. Values are never stored on the model (§6.5) — a test asserts the
 secret value never appears in `secretNames`.
+
+## Phase 6.4 — global config needs a real control surface, not a silent button
+
+**A one-shot "Create" button that vanishes reads as "nothing happened."** The
+Phase-6 dashboard strip created `~/.ai-control/` on click and disappeared (its
+gating condition flipped), so a *successful* action looked like a no-op and
+confused the user. Lesson: an action whose only feedback is the disappearance of
+its own trigger has no feedback. Fix: the create action moved into the **Global
+Config window** where the result stays visible (status flips in place +
+confirmation caption), and the strip's button became **"Set up…"** that *opens
+that window* rather than acting invisibly. No action in the window completes
+without visible feedback (Reveal flashes Finder, Open launches the editor, etc).
+
+**Principle 7 ("no templates") is about the OUTPUT (projects), not the INPUT
+(global modules).** The user asked for "pre-built files"; that seemed to clash
+with no-templates. Resolution (UX pass): §6.2 says *the user creates* the global
+modules — they are the source material the AI reads, not a templated project. So
+giving modules real content isn't a template violation. The real constraint is
+principle 2: **the *app* must not author content** (generic prose = the template
+smell). Answer = **Option C**: the *AI* interviews the user and writes the
+modules. App authors nothing, output is the user's own judgement, and the user
+ends up with real editable files — satisfying the ask and both principles.
+`createSkeleton()` deliberately still leaves `modules/` empty; "authored" means
+real AI/user content, which is what flips `hasModules` and clears the honest
+"needs global modules" state. Do **not** seed empty module files or the state
+becomes a lie.
+
+**Multi-scene SwiftUI: lift shared stores to the `App`, inject into every
+scene.** The Global Config window is a separate `Window` scene from the
+dashboard's `WindowGroup`, and both must observe the *same* store instances (edit
+in one, see it in the other). `DashboardView` used to own its `@StateObject`s;
+that keeps them private to that scene. Moved root/viewModel/session/globalConfig/
+alerts to `AIControlApp` as `@StateObject` (wired `sessions.globalConfig` in the
+App `init`), and `DashboardView`/`GlobalConfigWindow` now take them as
+`@ObservedObject` via init. `#Preview` and any other constructor must pass them
+explicitly. `⌘,` is claimed with `CommandGroup(replacing: .appSettings)` opening
+a real resizable `Window(id:)` — **not** the fixed SwiftUI `Settings` scene —
+because the control panel must resize and be Window-menu-reopenable.
+
+**Prompts are file-first with a default fallback; materialize on demand for
+"Open in editor."** A prompt file missing from `prompts/` still works (falls back
+to `RoutinePromptKind.defaultText`), so `Open in editor` first `writeIfAbsent`s
+the default then opens it — otherwise opening a never-edited prompt (or a repo
+created before a new prompt kind existed, e.g. `author-modules`) would fail on a
+nonexistent file. "Edited" badge = stored file differs from the trimmed default;
+missing-or-equal both read as "Default" (the truth the user cares about: is this
+still built-in behaviour?).
+
+**Known rough edge (MVP):** the module-authoring interview runs a Claude session
+keyed on `~/.ai-control` through the normal `TerminalSessionStore`, so it enters
+the running/awaiting machinery. It won't render as a dashboard row (no matching
+node), but an awaiting-input notification could fire during the interview since
+the sheet isn't the dashboard's `openProject`. Acceptable for MVP; revisit if the
+global/root session deserves its own first-class "AI window" (§8.4).
