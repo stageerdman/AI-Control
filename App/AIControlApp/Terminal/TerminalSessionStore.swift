@@ -50,20 +50,12 @@ final class TerminalSessionStore: ObservableObject {
     /// don't surface as a phantom "project is waiting for your reply."
     private var globalSessionURLs: Set<URL> = []
 
-    /// The folder currently handed to the AI window as a reference (PROJECT.md
-    /// §8.4), rendered as a chip in that window's header. Nil when none.
-    @Published private(set) var aiReference: AIReference?
-
-    /// Bumps whenever a global session (AI window / interview) finishes a turn
-    /// (working→awaiting). The dashboard observes it to rescan, so an adopt/fix
-    /// that wrote `.project`/`.organize` reclassifies the row without a relaunch.
+    /// Bumps whenever a global session (adopt/fix or the module interview)
+    /// finishes a turn (working→awaiting). The dashboard observes it to rescan,
+    /// so an adopt/fix that wrote `.project`/`.organize` reclassifies the row
+    /// without a relaunch.
     @Published private(set) var aiActivityTick = 0
     private var globalSessionSawWorking: [URL: Bool] = [:]
-
-    struct AIReference: Equatable {
-        let name: String
-        let path: String
-    }
 
     /// The prompt sent to Claude Code during the graceful Stop routine
     /// (PROJECT.md §7/§9.7), resolved from the global prompt store with a
@@ -272,63 +264,54 @@ final class TerminalSessionStore: ObservableObject {
         return session
     }
 
-    // MARK: - AI window + adopt/fix (PROJECT.md §8.4/§9.3)
+    // MARK: - Adopt / fix an untouched or invalid folder (PROJECT.md §9.3)
 
-    /// The persistent root-scoped session behind the AI window: a Claude session
-    /// at the connected root folder, marked global so it never pins or notifies.
-    /// No auto-prompt — it's the general session for questions and folder work.
+    /// Analyze an untouched folder for adoption. Opens a Claude session **in that
+    /// folder** (its own separate terminal — never a project's), auto-sends the
+    /// report-first `adopt` prompt, and returns the session for a sheet to show.
+    /// Once adopted, this same session becomes the new project's session.
     @discardableResult
-    func aiWindowSession(rootURL: URL) -> TerminalSession {
-        globalSessionURLs.insert(rootURL)
-        return session(for: rootURL)
-    }
-
-    func clearAIReference() { aiReference = nil }
-
-    /// Directed: analyze an untouched folder for adoption (§9.3). Auto-sends the
-    /// report-first `adopt` prompt + the folder path into the AI window session.
-    func adopt(folderURL: URL, rootURL: URL) {
+    func adopt(folderURL: URL) -> TerminalSession {
         let base = globalConfig?.promptText(for: .adopt) ?? RoutinePromptKind.adopt.defaultText
-        sendDirected(prompt: base + "\n\nThe folder to analyze is: \(folderURL.path)", folderURL: folderURL, rootURL: rootURL)
+        return startDirected(prompt: base, at: folderURL)
     }
 
-    /// Directed: fix an invalid nested organizer. Reuses the `adopt` prompt with a
-    /// fix appendix (a dedicated prompt kind is deferred).
-    func fixNesting(folderURL: URL, rootURL: URL) {
+    /// Fix an invalid nested organizer, in its own session. Reuses the `adopt`
+    /// prompt with a fix appendix (a dedicated prompt kind is deferred).
+    @discardableResult
+    func fixNesting(folderURL: URL) -> TerminalSession {
         let base = globalConfig?.promptText(for: .adopt) ?? RoutinePromptKind.adopt.defaultText
         let appendix = """
         This folder is an organizer (.organize) nested inside another organizer, which isn't allowed. \
         Fix it by either moving it out to the root, or moving its projects up into the parent organizer \
         and removing its .organize marker.
-        The folder is: \(folderURL.path)
         """
-        sendDirected(prompt: base + "\n\n" + appendix, folderURL: folderURL, rootURL: rootURL)
+        return startDirected(prompt: base + "\n\n" + appendix, at: folderURL)
     }
 
-    /// General: hand a project/organizer folder to the AI window as a reference,
-    /// pre-filling (but not submitting) a question line for the user to edit.
-    func askAI(about folderURL: URL, rootURL: URL) {
-        let isNew = sessions[rootURL] == nil
-        let session = aiWindowSession(rootURL: rootURL)
-        setReference(folderURL)
-        let line = "Tell me about the folder at \(folderURL.path)."
-        if isNew { session.onReady = { [weak session] in session?.send(line) } }
-        else { session.send(line) }
+    /// A general Claude session at `folderURL` with no auto-prompt (the user
+    /// types their own question). Marked global so it doesn't fire a project
+    /// notification. Used by right-click "Ask AI…" on an organizer.
+    @discardableResult
+    func askSession(for folderURL: URL) -> TerminalSession {
+        globalSessionURLs.insert(folderURL)
+        return session(for: folderURL)
     }
 
-    private func sendDirected(prompt: String, folderURL: URL, rootURL: URL) {
-        let isNew = sessions[rootURL] == nil
-        let session = aiWindowSession(rootURL: rootURL)
-        setReference(folderURL)
+    private func startDirected(prompt: String, at folderURL: URL) -> TerminalSession {
+        let isNew = sessions[folderURL] == nil
+        // Marked global so it doesn't fire a project notification while it's an
+        // untouched/invalid folder; once markers are written it becomes a real
+        // project session (the global flag is harmless there — it just skips the
+        // awaiting-input alert, and the row already shows running).
+        globalSessionURLs.insert(folderURL)
+        let session = session(for: folderURL)
         if isNew {
             session.onReady = { [weak session] in session?.sendLine(prompt) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak session] in session?.sendLine(prompt) }
         }
-    }
-
-    private func setReference(_ url: URL) {
-        aiReference = AIReference(name: url.lastPathComponent, path: url.path)
+        return session
     }
 
     // MARK: - Status watching

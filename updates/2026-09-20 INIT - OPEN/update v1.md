@@ -264,6 +264,21 @@ Phase 7 (New project / adopt flows + AI window) — done, awaiting live test:
 - Builds; app authors nothing (the only app writes are the empty New-Project dir
   and, earlier, the config skeleton — structure, never content).
 
+Phase 7.1 (live feedback) — done:
+- **App icon** added: an indigo→violet squircle with white control sliders
+  (`Assets.xcassets/AppIcon.appiconset`, generated at all macOS sizes; wired via
+  `ASSETCATALOG_COMPILER_APPICON_NAME`). Placeholder-quality; easy to replace.
+- **Dropped the standalone AI window** (scene + `AI` menu + `AIWindow.swift` +
+  `aiWindowSession`/`aiReference`) — the user saw no use for it, and its
+  root-keyed session **collided with a project's terminal** (same URL → same
+  session).
+- **Ask AI / adopt / fix now each get their own separate terminal**, keyed to the
+  *clicked folder* (never a project's), shown in a dedicated `AISessionSheet`.
+  Untouched → adopt prompt; invalid-nested → fix prompt; project → opens its own
+  full-window session; organizer → a plain terminal sheet. Once an untouched
+  folder is adopted, that same session becomes the new project's — clean
+  continuity. Dashboard rescans on sheet close + the global-session idle tick.
+
 Live-test flags carried from the specs: **pre-fill-without-submit** (the general
 Ask-AI line typed via `send()` without Enter) is unverified against the real
 `claude` TUI — if it collapses into a paste pill, fall back to auto-sending the

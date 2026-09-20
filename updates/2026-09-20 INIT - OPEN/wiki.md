@@ -560,3 +560,37 @@ open from top-level menu-bar menus — `CommandMenu("Global Config")` (⌘,) and
 `CommandMenu("AI")` (⌘\\) — plus auto-raise on action, rather than adding toolbar
 icons. New Project stays a toolbar button (a primary creative action, not a
 config surface).
+
+## Phase 7.1 — a shared root "AI window" collides with project terminals; give each AI task its own
+
+Live feedback killed the standalone AI window: the user saw no use for it, and it
+had a real bug — its session was keyed on the **root folder** URL, and a
+`TerminalSession` is keyed by URL, so if the root (or any folder the user also
+opened) matched, the "AI window" **was literally another project's terminal**.
+Also, one `NSView` terminal can't live in two containers, so sharing a session
+between a sheet and a full-window view fights over the view.
+
+**Fix:** drop the AI-window scene/menu entirely. Right-click **Ask AI…** / the
+sidebar **adopt** / **fix** buttons now open a **per-folder** session (keyed to
+the *clicked* folder, its own separate terminal) in an `AISessionSheet`:
+untouched → adopt prompt, invalid-nested → fix prompt, organizer → a plain ask
+session; a **project** routes to its own full-window `ProjectView` (never a
+sheet, avoiding the two-container view conflict). Bonus: keying adopt to the
+folder means that once it's adopted, the same session *is* the new project's
+session — natural continuity. These sessions still go in `globalSessionURLs`
+(no phantom awaiting-notification) and their idle tick drives the reclassify
+rescan. Lesson: a "general AI session" must be keyed to something that can never
+be a project URL, or it will collide — per-target sessions sidestep the whole
+problem.
+
+## App icon: render it with CoreGraphics, no design tool needed
+
+Generated `AppIcon` from a ~40-line Swift/AppKit script (`swift makeicon.swift`):
+draw a rounded-rect gradient tile (squircle radius ≈ 0.2237·side) into an
+`NSBitmapImageRep` at 1024², tint an SF Symbol white via `fill(using:.sourceAtop)`
+over its silhouette, composite centered, write PNG. `sips -z` downscales the
+macOS set (16→512), a hand-written `Contents.json` maps the 10 mac idiom slots,
+and `ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon` in `project.yml` wires it.
+Confirm it landed by checking the built bundle has `Contents/Resources/AppIcon.icns`
+and `CFBundleIconName=AppIcon` in Info.plist. (Dock may cache the old icon across
+rebuilds — a relaunch or `killall Dock` refreshes it.)

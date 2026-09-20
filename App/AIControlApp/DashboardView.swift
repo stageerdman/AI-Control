@@ -11,6 +11,7 @@ struct DashboardView: View {
     @ObservedObject var alerts: SessionAlerts
     @State private var isChoosingFolder = false
     @State private var isCreatingProject = false
+    @State private var aiSheet: AISheetItem?
     @State private var openProject: OpenProject?
     @State private var lastTap: (id: URL, at: Date)?
     @State private var scrollTarget: URL?
@@ -25,6 +26,13 @@ struct DashboardView: View {
         let node: AIControlNode
         let session: TerminalSession
         var id: URL { node.id }
+    }
+
+    /// A one-off AI task shown in its own terminal sheet (adopt / fix / ask).
+    struct AISheetItem: Identifiable {
+        let session: TerminalSession
+        let title: String
+        var id: URL { session.id }
     }
 
 
@@ -172,6 +180,12 @@ struct DashboardView: View {
                 )
             }
         }
+        .sheet(item: $aiSheet) { item in
+            AISessionSheet(session: item.session, title: item.title) {
+                aiSheet = nil
+                viewModel.rescan() // an adopt/fix may have written markers
+            }
+        }
     }
 
     private var rowList: some View {
@@ -238,34 +252,35 @@ struct DashboardView: View {
         rootFolderStore.expandedIDs.contains(row.id)
     }
 
-    /// Bring an untouched folder under AI Control (§9.3): send the report-first
-    /// adopt prompt + path to the AI window and raise it. The AI reports a verdict
-    /// and applies changes on the user's "yes" — the app touches nothing.
+    /// Bring an untouched folder under AI Control (§9.3): open its **own**
+    /// terminal (a Claude session in that folder) in a sheet and auto-send the
+    /// report-first adopt prompt. The AI reports a verdict and applies changes on
+    /// the user's "yes"; the app touches nothing. On close the dashboard rescans
+    /// so an adopted folder reclassifies.
     private func adoptFolder(_ node: AIControlNode) {
-        guard let root = viewModel.rootURL else { return }
-        sessionStore.adopt(folderURL: node.url, rootURL: root)
-        openWindow(id: AIWindow.windowID)
+        let session = sessionStore.adopt(folderURL: node.url)
+        aiSheet = AISheetItem(session: session, title: "Bring \(node.name) under AI Control")
     }
 
-    /// Fix an invalid nested organizer via the AI window (adopt prompt + fix
+    /// Fix an invalid nested organizer in its own terminal (adopt prompt + fix
     /// appendix).
     private func fixNesting(_ node: AIControlNode) {
-        guard let root = viewModel.rootURL else { return }
-        sessionStore.fixNesting(folderURL: node.url, rootURL: root)
-        openWindow(id: AIWindow.windowID)
+        let session = sessionStore.fixNesting(folderURL: node.url)
+        aiSheet = AISheetItem(session: session, title: "Fix \(node.name)")
     }
 
-    /// Right-click "Ask AI…": hand the folder to the AI window. Untouched/invalid
-    /// folders get the directed adopt/fix prompt; projects/organizers get an
-    /// editable pre-filled reference line (§8.4).
+    /// Right-click "Ask AI…": untouched/invalid folders get the directed
+    /// adopt/fix in their own terminal sheet; a project opens full-window in its
+    /// own session; an organizer opens a plain terminal sheet at its folder.
     private func askAI(_ node: AIControlNode) {
-        guard let root = viewModel.rootURL else { return }
         switch node.kind {
-        case .untouched: sessionStore.adopt(folderURL: node.url, rootURL: root)
-        case .invalidNestedOrganizer: sessionStore.fixNesting(folderURL: node.url, rootURL: root)
-        default: sessionStore.askAI(about: node.url, rootURL: root)
+        case .untouched: adoptFolder(node)
+        case .invalidNestedOrganizer: fixNesting(node)
+        case .project: openSessionForNode(node)
+        case .organizer:
+            let session = sessionStore.askSession(for: node.url)
+            aiSheet = AISheetItem(session: session, title: "Ask AI · \(node.name)")
         }
-        openWindow(id: AIWindow.windowID)
     }
 
     /// New Project (§9.2): create the empty target dir + open its AI session, then
