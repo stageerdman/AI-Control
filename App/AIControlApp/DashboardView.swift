@@ -38,7 +38,8 @@ struct DashboardView: View {
                     ProjectSidebarView(
                         node: viewModel.selectedNode,
                         gitStatus: viewModel.selectedGitStatus,
-                        onBringUnderControl: bringUnderControl
+                        onBringUnderControl: revealInFinder,
+                        onLetAIFix: revealInFinder
                     )
                     .frame(minWidth: 260, idealWidth: 320, maxWidth: 460)
                 }
@@ -98,10 +99,11 @@ struct DashboardView: View {
         rootFolderStore.expandedIDs.contains(row.id)
     }
 
-    /// Interim behavior for the untouched-folder action until the AI-window
-    /// adoption flow (Phase 9.3) exists: reveal the folder in Finder so the
-    /// button does something real and non-misleading (its caption says so).
-    private func bringUnderControl(_ node: AIControlNode) {
+    /// Interim behavior for the AI-driven actions (adopt an untouched folder,
+    /// fix an invalid nested organizer) until the AI window (Phase 4+) exists:
+    /// reveal the folder in Finder, so the buttons do something real and
+    /// non-misleading (their captions say so).
+    private func revealInFinder(_ node: AIControlNode) {
         NSWorkspace.shared.activateFileViewerSelecting([node.url])
     }
 }

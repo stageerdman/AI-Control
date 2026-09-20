@@ -10,9 +10,12 @@ import AIControlCore
 struct ProjectSidebarView: View {
     let node: AIControlNode?
     let gitStatus: GitStatus?
-    /// Interim action for untouched folders until the AI-window adoption flow
-    /// (Phase 9.3) is built.
+    /// Interim actions for the two AI-driven flows until the AI window
+    /// (Phase 4+) exists: adopting an untouched folder (Phase 9.3) and fixing
+    /// an invalid nested organizer. Both hand a folder + a predefined prompt
+    /// to the AI later; for now they reveal the folder in Finder.
     let onBringUnderControl: (AIControlNode) -> Void
+    let onLetAIFix: (AIControlNode) -> Void
 
     var body: some View {
         Group {
@@ -26,7 +29,7 @@ struct ProjectSidebarView: View {
             case .untouched:
                 UntouchedDetail(node: node!, onBringUnderControl: onBringUnderControl)
             case .invalidNestedOrganizer:
-                InvalidNestedDetail(node: node!)
+                InvalidNestedDetail(node: node!, onLetAIFix: onLetAIFix)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -68,21 +71,16 @@ private struct ProjectDetail: View {
                 systemImage: "folder.fill",
                 isAccent: true,
                 name: node.name,
-                caption: "Under AI Control" + visibilitySuffix
+                caption: "Under AI Control"
             )
         ) {
             descriptionSection
-            GitStatusSection(status: gitStatus, githubURL: file.github)
+            GitStatusSection(status: gitStatus, githubURL: file.github, visibility: file.visibility)
             secretsSection
             maintenanceSection
             activitySection
             detailsSection
         }
-    }
-
-    private var visibilitySuffix: String {
-        guard let visibility = file.visibility, !visibility.isEmpty else { return "" }
-        return " · \(visibility.capitalized)"
     }
 
     @ViewBuilder
@@ -133,30 +131,20 @@ private struct ProjectDetail: View {
     private var activitySection: some View {
         SidebarSection(title: "Activity") {
             VStack(alignment: .leading, spacing: 4) {
-                SidebarPlaceholderRow(label: "Last chat / tokens")
                 SidebarKeyValue(key: "Folder modified", value: SidebarFormat.relativeString(node.lastActivityDate))
+                SidebarPlaceholderRow(label: "Tokens consumed")
             }
         }
     }
 
     @ViewBuilder
     private var detailsSection: some View {
-        SidebarSection(title: "Details") {
-            VStack(alignment: .leading, spacing: 4) {
-                if let visibility = file.visibility {
-                    SidebarKeyValue(key: "Visibility", value: visibility.capitalized)
-                }
-                if let adopted = file.adopted {
-                    SidebarKeyValue(key: "Adopted", value: adopted)
-                }
-                SidebarKeyValue(
-                    key: "Modules",
-                    value: file.modules.isEmpty ? "None" : file.modules.joined(separator: " · ")
-                )
-                SidebarKeyValue(
-                    key: "CLAUDE.md",
-                    value: file.claudeMdGenerated.map { "Generated \($0)" } ?? "Not generated yet"
-                )
+        // Visibility now lives in Git; CLAUDE.md in Maintenance; modules aren't
+        // a surfaced concept. Only the adoption date remains here — hide the
+        // section entirely when there's nothing to show.
+        if let adopted = file.adopted {
+            SidebarSection(title: "Details") {
+                SidebarKeyValue(key: "Adopted", value: adopted)
             }
         }
     }
@@ -238,10 +226,7 @@ private struct UntouchedDetail: View {
             }
 
             SidebarSection(title: "Details") {
-                VStack(alignment: .leading, spacing: 4) {
-                    SidebarKeyValue(key: "Path", value: node.url.path)
-                    SidebarKeyValue(key: "Folder modified", value: SidebarFormat.relativeString(node.lastActivityDate))
-                }
+                SidebarKeyValue(key: "Folder modified", value: SidebarFormat.relativeString(node.lastActivityDate))
             }
         }
     }
@@ -251,6 +236,7 @@ private struct UntouchedDetail: View {
 
 private struct InvalidNestedDetail: View {
     let node: AIControlNode
+    let onLetAIFix: (AIControlNode) -> Void
 
     var body: some View {
         SidebarScaffold(
@@ -266,13 +252,13 @@ private struct InvalidNestedDetail: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Ask the AI to fix it: right-click the row and choose AI, or use the dashboard AI window.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            SidebarSection(title: "Details") {
-                SidebarKeyValue(key: "Path", value: node.url.path)
+            VStack(alignment: .leading, spacing: 4) {
+                Button("Let AI fix it") { onLetAIFix(node) }
+                    .buttonStyle(.bordered)
+                Text("The AI will read this folder with a predefined prompt and fix it. That arrives with the AI window; for now this reveals the folder in Finder.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

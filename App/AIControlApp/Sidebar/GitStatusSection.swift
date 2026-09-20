@@ -8,6 +8,8 @@ struct GitStatusSection: View {
     let status: GitStatus?
     /// `github:` URL from `.project`, if any.
     let githubURL: String?
+    /// Repo `visibility:` from `.project` (e.g. "public"/"private"), if any.
+    let visibility: String?
 
     var body: some View {
         SidebarSection(title: "Git") {
@@ -23,12 +25,14 @@ struct GitStatusSection: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     githubRow // a folder may declare a github URL even if not cloned as a repo
+                    visibilityRow
                 case .some(let status):
                     cleanStateRow(status)
                     branchRow(status)
                     aheadBehindRow(status)
                     lastCommitRow(status)
                     githubRow
+                    visibilityRow
                 }
             }
         }
@@ -117,6 +121,15 @@ struct GitStatusSection: View {
             .foregroundStyle(Color.accentColor)
         } else {
             Text("No GitHub URL in .project")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private var visibilityRow: some View {
+        if let visibility, !visibility.isEmpty {
+            Text("\(visibility.capitalized) repository")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
