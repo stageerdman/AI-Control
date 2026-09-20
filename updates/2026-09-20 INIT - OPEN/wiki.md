@@ -365,3 +365,16 @@ only quits Claude — the shell (and thus the session process) is still alive. T
 routine therefore `/exit`s Claude for a clean shutdown and **then** terminates
 the shell, so the row actually unpins. `TerminalSession.onTerminated` alone
 wouldn't fire on `/exit`.
+
+**Sending input to Claude's TUI: submit with `\r`, interrupt with Esc — not
+`\n`/Ctrl-C.** The first Stop implementation sent the wrap-up prompt with `\n`
+and interrupted with Ctrl-C, and *nothing reached Claude*. Claude Code's TUI
+runs the PTY in **raw mode**: Enter is a **carriage return (`\r`)**, so a `\n`
+types the text into the input box but never submits it; and it **interrupts on
+Esc** (Ctrl-C is its exit key). Verified against a real `claude` TUI (it only
+began generating after a `\r`, and shows "esc to interrupt"). `\r` also submits
+in the cooked-mode shell (the tty maps CR→NL), so `TerminalSession.sendLine`
+uses `\r` everywhere, including auto-launch. **How to apply:** any future
+programmatic input to Claude (rebuild/sync/new-update prompts, §8.6) must submit
+with `\r`; interrupts use Esc. Give an Esc ~0.9s to settle before typing so
+keystrokes aren't dropped mid-interrupt.
