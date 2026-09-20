@@ -42,8 +42,10 @@ struct GlobalConfigWindow: View {
 
     var body: some View {
         NavigationSplitView {
-            List(Section.allCases, selection: $selection) { section in
-                Label(section.rawValue, systemImage: section.symbol).tag(Optional(section))
+            List(selection: $selection) {
+                ForEach(Section.allCases) { section in
+                    Label(section.rawValue, systemImage: section.symbol).tag(section)
+                }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
         } detail: {

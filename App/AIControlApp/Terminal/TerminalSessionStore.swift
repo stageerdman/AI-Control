@@ -44,6 +44,12 @@ final class TerminalSessionStore: ObservableObject {
     @Published private(set) var rebuildingURLs: Set<URL> = []
     private var rebuilding: [URL: RebuildState] = [:]
 
+    /// Internal sessions that aren't dashboard projects (e.g. the root-scoped
+    /// module-authoring interview at `~/.ai-control`). Excluded from the
+    /// awaiting-input notifications/badge so they don't surface as a phantom
+    /// "project is waiting for your reply."
+    private var globalSessionURLs: Set<URL> = []
+
     /// The prompt sent to Claude Code during the graceful Stop routine
     /// (PROJECT.md §7/§9.7), resolved from the global prompt store with a
     /// built-in default fallback.
@@ -190,6 +196,7 @@ final class TerminalSessionStore: ObservableObject {
     /// the interview. The AI writes the module files; the app writes nothing.
     @discardableResult
     func authorModules(at dir: URL) -> TerminalSession {
+        globalSessionURLs.insert(dir)
         let isNew = sessions[dir] == nil
         let session = session(for: dir)
         if isNew {
@@ -233,7 +240,7 @@ final class TerminalSessionStore: ObservableObject {
     }
 
     private func recomputeAwaitingInput() {
-        let awaiting = Set(runningURLs.filter { activityByURL[$0] == .awaitingInput })
+        let awaiting = Set(runningURLs.filter { activityByURL[$0] == .awaitingInput && !globalSessionURLs.contains($0) })
         if awaiting != awaitingInputURLs { awaitingInputURLs = awaiting }
     }
 
@@ -249,6 +256,7 @@ final class TerminalSessionStore: ObservableObject {
         stopping[url] = nil
         rebuilding[url] = nil
         rebuildingURLs.remove(url)
+        globalSessionURLs.remove(url)
         keyToURL[hooks.key(for: url)] = nil
         runningURLs.remove(url)
         hooks.removeStatus(for: url)
