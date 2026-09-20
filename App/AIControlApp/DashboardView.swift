@@ -5,10 +5,12 @@ struct DashboardView: View {
     @StateObject private var rootFolderStore = RootFolderStore()
     @StateObject private var viewModel: DashboardViewModel
     @StateObject private var sessionStore = TerminalSessionStore()
+    @StateObject private var alerts = SessionAlerts()
     @State private var isChoosingFolder = false
     @State private var openProject: OpenProject?
     @State private var lastTap: (id: URL, at: Date)?
     @FocusState private var listIsFocused: Bool
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The project currently shown full-window in the project view, paired with
     /// its live terminal session. Created on double-click (not during body), so
@@ -26,10 +28,33 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        if let open = openProject {
-            ProjectView(node: open.node, session: open.session) { openProject = nil }
-        } else {
-            dashboard
+        Group {
+            if let open = openProject {
+                ProjectView(node: open.node, session: open.session) { openProject = nil }
+            } else {
+                dashboard
+            }
+        }
+        // Session/alert state is synced here — on the always-present container,
+        // not inside `dashboard` — so notifications and the Dock badge keep
+        // updating while the user is inside a project view too.
+        .onAppear {
+            alerts.requestAuthorization()
+            viewModel.setRunningURLs(sessionStore.runningURLs)
+            viewModel.setAwaitingInputURLs(sessionStore.awaitingInputURLs)
+            syncAlerts()
+        }
+        .onChange(of: sessionStore.runningURLs) { _, newValue in viewModel.setRunningURLs(newValue) }
+        .onChange(of: sessionStore.awaitingInputURLs) { _, newValue in
+            viewModel.setAwaitingInputURLs(newValue)
+            syncAlerts()
+        }
+        .onChange(of: scenePhase) { _, _ in syncAlerts() }
+        .onChange(of: openProject?.id) { _, _ in syncAlerts() }
+        .onChange(of: alerts.pendingOpenURL) { _, url in
+            guard let url else { return }
+            openProjectByURL(url)
+            alerts.pendingOpenURL = nil
         }
     }
 
@@ -65,12 +90,6 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 360)
-        .onAppear {
-            viewModel.setRunningURLs(sessionStore.runningURLs)
-            viewModel.setAwaitingInputURLs(sessionStore.awaitingInputURLs)
-        }
-        .onChange(of: sessionStore.runningURLs) { _, newValue in viewModel.setRunningURLs(newValue) }
-        .onChange(of: sessionStore.awaitingInputURLs) { _, newValue in viewModel.setAwaitingInputURLs(newValue) }
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "Search")
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
@@ -167,6 +186,25 @@ struct DashboardView: View {
         guard row.node.kind == .project else { return }
         viewModel.handleClick(on: row) // keep the selection in sync
         openProject = OpenProject(node: row.node, session: sessionStore.session(for: row.node.url))
+    }
+
+    /// Opens a project by URL (used when a notification is clicked). No-op if the
+    /// URL no longer resolves to a project.
+    private func openProjectByURL(_ url: URL) {
+        guard let node = viewModel.node(for: url), node.kind == .project else { return }
+        viewModel.selectedID = url
+        openProject = OpenProject(node: node, session: sessionStore.session(for: url))
+    }
+
+    /// Pushes the current awaiting/foreground/active state into `SessionAlerts`,
+    /// which owns the notification + Dock-badge behavior.
+    private func syncAlerts() {
+        alerts.update(
+            awaiting: sessionStore.awaitingInputURLs,
+            foreground: openProject?.id,
+            appActive: scenePhase == .active,
+            name: { viewModel.node(for: $0)?.name ?? "Project" }
+        )
     }
 
     /// Closes a running session (right-click action). Opening is via

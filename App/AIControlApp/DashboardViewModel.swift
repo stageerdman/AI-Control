@@ -146,6 +146,10 @@ final class DashboardViewModel: ObservableObject {
         rebuildRows()
     }
 
+    /// Resolves a project/organizer node by its URL, for callers that only have
+    /// a URL (e.g. opening a project from a notification click).
+    func node(for url: URL) -> AIControlNode? { findNode(withID: url) }
+
     /// Finds a node by URL across top-level nodes and organizer children
     /// (the tree is only ever two levels deep — no nested organizers).
     private func findNode(withID id: URL) -> AIControlNode? {
