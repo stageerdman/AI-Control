@@ -212,7 +212,15 @@ Phase 6.4 (Global Config control window, from live feedback) — done:
   CODING; shown in a `DraftModulesSheet`; reload on close self-heals status to
   "Ready · n modules". App authors nothing (principles 2/7 intact — modules are
   the *input* the AI writes, not a project template; see wiki).
-- Builds; 63 core tests unaffected. **Awaiting live verification.**
+- **Live-verified (2026-09-20):** the top-bar **Global Config** menu opens the
+  window; sidebar sections switch; Reveal/Open work; the **Draft modules with AI**
+  interview runs and writes the four modules (Modules section then lists them).
+  Fixes found live and applied: single top-bar menu (no gear); `List(selection:)`
+  +`ForEach`+`.tag` so sidebar rows are clickable; robust Open-in-editor
+  (falls back to Reveal); the interview now sends on a real *ready* signal (Claude
+  booted + output quiet, 12s cap) instead of a fixed timer that raced startup; and
+  the root interview session is excluded from awaiting-input alerts so it no longer
+  fires a phantom "project is waiting for your reply."
 
 Deferred from Phase 6 (by design):
 - **Secret sync** row is still an honest placeholder — it shares this exact
