@@ -24,6 +24,10 @@ final class DashboardViewModel: ObservableObject {
     /// top-level nodes and organizer children.
     @Published private(set) var selectedNode: AIControlNode?
 
+    /// Number of pinned running-session rows at the top of `rows`, so the view
+    /// can draw a divider between them and the rest of the dashboard.
+    @Published private(set) var pinnedRunningCount = 0
+
     /// Projects with a live terminal session, pinned on top of the list
     /// (PROJECT.md §8.1). Fed from the `TerminalSessionStore`.
     private var runningURLs: Set<URL> = []
@@ -172,6 +176,7 @@ final class DashboardViewModel: ObservableObject {
     /// first, and removes them from their normal position so they aren't shown
     /// twice. Skipped while searching, so search results aren't reordered.
     private func pinningRunningSessions(_ base: [DashboardRow]) -> [DashboardRow] {
+        pinnedRunningCount = 0
         guard !runningURLs.isEmpty, searchQuery.isEmpty else { return base }
 
         let pinnedNodes = runningURLs
@@ -184,6 +189,7 @@ final class DashboardViewModel: ObservableObject {
         let pinnedIDs = Set(pinnedNodes.map(\.id))
         let pinnedRows = pinnedNodes.map { DashboardRow(node: $0, depth: 0) }
         let rest = base.filter { !pinnedIDs.contains($0.id) }
+        pinnedRunningCount = pinnedRows.count
         return pinnedRows + rest
     }
 }

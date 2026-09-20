@@ -83,7 +83,7 @@ struct DashboardView: View {
     private var rowList: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(viewModel.rows) { row in
+                ForEach(Array(viewModel.rows.enumerated()), id: \.element.id) { index, row in
                     DashboardRowView(
                         row: row,
                         isExpanded: isExpandedOrganizer(row),
@@ -94,8 +94,15 @@ struct DashboardView: View {
                     .onTapGesture {
                         handleRowTap(row)
                     }
-                    .contextMenu {
-                        rowContextMenu(row)
+                    .ifCondition(sessionStore.runningURLs.contains(row.id)) { view in
+                        view.contextMenu {
+                            Button("Close Session", role: .destructive) { closeSession(row) }
+                        }
+                    }
+
+                    // Separate the pinned running sessions from the rest.
+                    if viewModel.pinnedRunningCount > 0, index == viewModel.pinnedRunningCount - 1 {
+                        Divider().padding(.vertical, 2)
                     }
                 }
             }
@@ -155,19 +162,24 @@ struct DashboardView: View {
         openProject = OpenProject(node: row.node, session: sessionStore.session(for: row.node.url))
     }
 
-    /// Right-click menu. Running sessions can be opened or closed; other
-    /// projects can be opened (which starts a session).
+    /// Closes a running session (right-click action). Opening is via
+    /// double-click, so there's no "Open Session" menu item.
+    private func closeSession(_ row: DashboardRow) {
+        sessionStore.stopSession(for: row.node.url)
+        if openProject?.id == row.id { openProject = nil }
+    }
+}
+
+private extension View {
+    /// Applies `transform` only when `condition` is true, so a modifier (e.g. a
+    /// context menu) isn't attached at all otherwise — avoids an empty
+    /// right-click menu on rows that have nothing to offer.
     @ViewBuilder
-    private func rowContextMenu(_ row: DashboardRow) -> some View {
-        if row.node.kind == .project {
-            Button("Open Session") { openProjectView(row) }
-            if sessionStore.runningURLs.contains(row.id) {
-                Button("Close Session", role: .destructive) {
-                    sessionStore.stopSession(for: row.node.url)
-                    if openProject?.id == row.id { openProject = nil }
-                }
-            }
-        }
+    func ifCondition<Transformed: View>(
+        _ condition: Bool,
+        _ transform: (Self) -> Transformed
+    ) -> some View {
+        if condition { transform(self) } else { self }
     }
 }
 
