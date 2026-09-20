@@ -9,7 +9,6 @@ import AIControlCore
 /// placeholder, never a faked status.
 struct ProjectSidebarView: View {
     let node: AIControlNode?
-    let gitStatus: GitStatus?
     /// Interim actions for the two AI-driven flows until the AI window
     /// (Phase 4+) exists: adopting an untouched folder (Phase 9.3) and fixing
     /// an invalid nested organizer. Both hand a folder + a predefined prompt
@@ -23,7 +22,7 @@ struct ProjectSidebarView: View {
             case .none:
                 SidebarEmptyState()
             case .project:
-                ProjectDetail(node: node!, gitStatus: gitStatus)
+                ProjectDetail(node: node!)
             case .organizer:
                 OrganizerDetail(node: node!)
             case .untouched:
@@ -61,7 +60,6 @@ private struct SidebarScaffold<Content: View>: View {
 
 private struct ProjectDetail: View {
     let node: AIControlNode
-    let gitStatus: GitStatus?
 
     private var file: ProjectFile { node.projectFile ?? ProjectFile() }
 
@@ -75,7 +73,7 @@ private struct ProjectDetail: View {
             )
         ) {
             descriptionSection
-            GitStatusSection(status: gitStatus, githubURL: file.github, visibility: file.visibility)
+            GitHubSection(githubURL: file.github, visibility: file.visibility)
             secretsSection
             maintenanceSection
             activitySection

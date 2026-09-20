@@ -7,6 +7,7 @@ struct DashboardView: View {
     @StateObject private var sessionStore = TerminalSessionStore()
     @State private var isChoosingFolder = false
     @State private var openProject: OpenProject?
+    @State private var lastTap: (id: URL, at: Date)?
     @FocusState private var listIsFocused: Bool
 
     /// The project currently shown full-window in the project view, paired with
@@ -56,7 +57,6 @@ struct DashboardView: View {
                         .layoutPriority(1)
                     ProjectSidebarView(
                         node: viewModel.selectedNode,
-                        gitStatus: viewModel.selectedGitStatus,
                         onBringUnderControl: revealInFinder,
                         onLetAIFix: revealInFinder
                     )
@@ -65,6 +65,8 @@ struct DashboardView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 360)
+        .onAppear { viewModel.setRunningURLs(sessionStore.runningURLs) }
+        .onChange(of: sessionStore.runningURLs) { _, newValue in viewModel.setRunningURLs(newValue) }
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "Search")
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
@@ -86,13 +88,14 @@ struct DashboardView: View {
                         row: row,
                         isExpanded: isExpandedOrganizer(row),
                         isCursor: viewModel.cursorID == row.id,
-                        isSelected: viewModel.selectedID == row.id
+                        isSelected: viewModel.selectedID == row.id,
+                        isRunning: sessionStore.runningURLs.contains(row.id)
                     )
-                    .onTapGesture(count: 2) {
-                        openProjectView(row)
-                    }
                     .onTapGesture {
-                        viewModel.handleClick(on: row)
+                        handleRowTap(row)
+                    }
+                    .contextMenu {
+                        rowContextMenu(row)
                     }
                 }
             }
@@ -129,6 +132,20 @@ struct DashboardView: View {
         NSWorkspace.shared.activateFileViewerSelecting([node.url])
     }
 
+    /// Handles a single click, detecting a double-click manually by timing.
+    /// This keeps single-click **instant** — a SwiftUI `.onTapGesture(count: 2)`
+    /// would delay every single click while it waited to disambiguate.
+    private func handleRowTap(_ row: DashboardRow) {
+        let now = Date()
+        if let last = lastTap, last.id == row.id, now.timeIntervalSince(last.at) < 0.4 {
+            lastTap = nil
+            openProjectView(row)
+        } else {
+            lastTap = (row.id, now)
+            viewModel.handleClick(on: row)
+        }
+    }
+
     /// Double-clicking a project opens its terminal session in the project
     /// view (PROJECT.md §8.1/§8.3). Only projects have a session; other row
     /// kinds are inert on double-click for now.
@@ -136,6 +153,21 @@ struct DashboardView: View {
         guard row.node.kind == .project else { return }
         viewModel.handleClick(on: row) // keep the selection in sync
         openProject = OpenProject(node: row.node, session: sessionStore.session(for: row.node.url))
+    }
+
+    /// Right-click menu. Running sessions can be opened or closed; other
+    /// projects can be opened (which starts a session).
+    @ViewBuilder
+    private func rowContextMenu(_ row: DashboardRow) -> some View {
+        if row.node.kind == .project {
+            Button("Open Session") { openProjectView(row) }
+            if sessionStore.runningURLs.contains(row.id) {
+                Button("Close Session", role: .destructive) {
+                    sessionStore.stopSession(for: row.node.url)
+                    if openProject?.id == row.id { openProject = nil }
+                }
+            }
+        }
     }
 }
 

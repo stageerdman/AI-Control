@@ -11,6 +11,7 @@ struct DashboardRowView: View {
     let isExpanded: Bool
     let isCursor: Bool
     let isSelected: Bool
+    var isRunning: Bool = false
 
     @Environment(\.controlActiveState) private var controlActiveState
 
@@ -62,9 +63,17 @@ struct DashboardRowView: View {
                     .help(Self.absoluteFormatter.string(from: row.node.lastActivityDate))
             }
 
-            // Reserved for a future status badge/pin (Phase 4/5) — kept
-            // empty now so later phases don't reflow row layout.
-            Color.clear.frame(width: 16)
+            // Running-session indicator (PROJECT.md §8.1). The slot is always
+            // reserved so rows don't reflow when a session starts/stops.
+            Group {
+                if isRunning {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                        .help("Session running")
+                }
+            }
+            .frame(width: 16)
         }
         .padding(.leading, CGFloat(row.depth) * 16)
         .padding(.vertical, 4)

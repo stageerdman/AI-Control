@@ -24,31 +24,24 @@ final class DashboardViewModel: ObservableObject {
     /// top-level nodes and organizer children.
     @Published private(set) var selectedNode: AIControlNode?
 
-    /// Git state for `selectedNode`. `nil` while a read is in flight (or when
-    /// nothing is selected); the sidebar shows a loading state then. A folder
-    /// that isn't a repo resolves to `.notARepository`, not `nil`.
-    @Published private(set) var selectedGitStatus: GitStatus?
+    /// Projects with a live terminal session, pinned on top of the list
+    /// (PROJECT.md §8.1). Fed from the `TerminalSessionStore`.
+    private var runningURLs: Set<URL> = []
 
     private let rootFolderStore: RootFolderStore
     private let scanner: FolderScanner
-    private let gitStatusReader: GitStatusReader
     private var nodes: [AIControlNode] = []
     private var cancellables: Set<AnyCancellable> = []
-    /// Guards against a slow git read for a since-changed selection landing on
-    /// the wrong node.
-    private var gitReadToken = UUID()
 
     var rootURL: URL? { rootFolderStore.rootURL }
     var hasRootFolder: Bool { rootFolderStore.rootURL != nil }
 
     init(
         rootFolderStore: RootFolderStore,
-        scanner: FolderScanner = FolderScanner(),
-        gitStatusReader: GitStatusReader = GitStatusReader()
+        scanner: FolderScanner = FolderScanner()
     ) {
         self.rootFolderStore = rootFolderStore
         self.scanner = scanner
-        self.gitStatusReader = gitStatusReader
 
         rootFolderStore.$rootURL
             .sink { [weak self] _ in self?.rescan() }
@@ -115,26 +108,18 @@ final class DashboardViewModel: ObservableObject {
         selectedID = nil
     }
 
-    /// Recomputes `selectedNode` from `selectedID` and kicks off a fresh git
-    /// read for it. Called whenever the selection changes or the tree rescans.
+    /// Recomputes `selectedNode` from `selectedID`. Cheap (an in-memory lookup)
+    /// — no git or other I/O, so clicking between rows is instant. GitHub info
+    /// in the sidebar comes from `.project`, not a per-click `git` call.
     private func refreshSelection() {
-        let node = selectedID.flatMap { findNode(withID: $0) }
-        selectedNode = node
-        selectedGitStatus = nil
+        selectedNode = selectedID.flatMap { findNode(withID: $0) }
+    }
 
-        gitReadToken = UUID()
-        guard let node else { return }
-        let token = gitReadToken
-        let url = node.url
-        let reader = gitStatusReader
-        Task.detached(priority: .userInitiated) {
-            let status = reader.status(for: url)
-            await MainActor.run {
-                // Ignore results for a selection the user has since moved off.
-                guard self.gitReadToken == token else { return }
-                self.selectedGitStatus = status
-            }
-        }
+    /// Updates which projects have a running session (pinned on top).
+    func setRunningURLs(_ urls: Set<URL>) {
+        guard urls != runningURLs else { return }
+        runningURLs = urls
+        rebuildRows()
     }
 
     /// Finds a node by URL across top-level nodes and organizer children
@@ -174,10 +159,31 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func rebuildRows() {
-        rows = DashboardListBuilder.build(
+        let base = DashboardListBuilder.build(
             nodes: nodes,
             expandedIDs: rootFolderStore.expandedIDs,
             searchQuery: searchQuery
         )
+        rows = pinningRunningSessions(base)
+    }
+
+    /// Pins projects with a live session to the top of the list at depth 0
+    /// (PROJECT.md §8.1: "running sessions are pinned on top"), most-recent
+    /// first, and removes them from their normal position so they aren't shown
+    /// twice. Skipped while searching, so search results aren't reordered.
+    private func pinningRunningSessions(_ base: [DashboardRow]) -> [DashboardRow] {
+        guard !runningURLs.isEmpty, searchQuery.isEmpty else { return base }
+
+        let pinnedNodes = runningURLs
+            .compactMap { findNode(withID: $0) }
+            .filter { $0.kind == .project }
+            .sorted { $0.lastActivityDate > $1.lastActivityDate }
+
+        guard !pinnedNodes.isEmpty else { return base }
+
+        let pinnedIDs = Set(pinnedNodes.map(\.id))
+        let pinnedRows = pinnedNodes.map { DashboardRow(node: $0, depth: 0) }
+        let rest = base.filter { !pinnedIDs.contains($0.id) }
+        return pinnedRows + rest
     }
 }
